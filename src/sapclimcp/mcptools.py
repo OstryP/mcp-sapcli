@@ -154,7 +154,9 @@ def _run_sapcli_command(command: CommandType, conn: SAPConnectionType, args: Sim
 
     output_buffer = OutputBuffer()
 
-    sap.cli.core.set_console(output_buffer)
+    # Override console_factory so the command uses our per-invocation buffer
+    # instead of the global console (thread-safe)
+    args.console_factory = lambda: output_buffer
 
     try:
         command(conn, args)

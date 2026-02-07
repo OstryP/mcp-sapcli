@@ -67,6 +67,7 @@ python3 src/sapcli-mcp-server.py --experimental
 - MCP tool definitions are automatically generated from Python's ArgParser definitions in the module sap.cli
 - every sapcli command is supposed to use sap.cli.core.PrintConsole to print out data (no direct output is allowed)
 - MCP server replaces the default sap.cli.core.PrintConsole with it is own buffer based implementation and returns the captured output
+- the sapcli functions handling commands take the PrintConsole object from the given args under the member console_factory
 
 ### Verified tools
 - [abap\_package\_list](https://github.com/jfilak/sapcli/blob/master/doc/commands/package.md#list) - list objects belonging to ABAP package hierarchy

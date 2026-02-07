@@ -92,6 +92,7 @@ class ArgParserTool:
         self.conn_factory = conn_factory
         self.input_schema = ArgPaserToolInputSchema()
         self.tools = {}
+        self._defaults: dict[str, Any] = {}
 
         self._parent = parent
         self._parameters = {}
@@ -130,10 +131,15 @@ class ArgParserTool:
             self.input_schema.required.append(parameter)
 
     def set_defaults(self, **kwargs):
-        if len(kwargs.keys()) != 1 or 'execute' not in kwargs:
-            ArgToToolConversionError('set_defaults: ' + self.name + ' ' + str(kwargs))
-
-        self.cmdfn = kwargs['execute']
+        for key, value in kwargs.items():
+            if key == 'execute':
+                self.cmdfn = value
+            elif key == 'console_factory':
+                self._defaults[key] = value
+            else:
+                raise ArgToToolConversionError(
+                    f'set_defaults: {self.name}: unknown parameter: {key}'
+                )
 
     def add_subparsers(self):
         # I am not exactly sure what is the goal of "subparsers"
@@ -235,5 +241,11 @@ class ArgParserTool:
             elif prop_name not in self.input_schema.required:
                 # Optional properties without defaults get None (ArgumentParser behavior)
                 prepared[prop_name] = None
+
+        # Include defaults from set_defaults (e.g. console_factory)
+        # that are not part of the input schema
+        for key, value in self._defaults.items():
+            if key not in prepared:
+                prepared[key] = value
 
         return SimpleNamespace(**prepared)

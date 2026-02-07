@@ -104,10 +104,9 @@ class TestRunAdtCommand:
     def test_success(self, mock_connection, sample_adt_config):
         """Test successful ADT command execution."""
         def mock_command(conn, args):
-            console = sap.cli.core.get_console()
+            console = args.console_factory()
             console.printout("test capture stdout")
             console.printerr("test capture stderr")
-            pass
 
         config = SimpleNamespace(**sample_adt_config)
 
@@ -141,7 +140,7 @@ class TestRunSapcliCommand:
         mock_conn = MagicMock()
 
         def mock_command(conn, args):
-            console = sap.cli.core.get_console()
+            console = args.console_factory()
             console.printout("test capture stdout")
             console.printerr("test capture stderr")
 
@@ -156,7 +155,7 @@ class TestRunSapcliCommand:
         mock_conn = MagicMock()
 
         def mock_command(conn, args):
-            console = sap.cli.core.get_console()
+            console = args.console_factory()
             console.printout("test capture stdout")
             console.printerr("test capture stderr")
             raise SAPCliError("Command failed")
