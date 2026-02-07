@@ -1,5 +1,6 @@
 """Unit tests for sapcli-mcp-server.py"""
 
+import os
 from unittest.mock import MagicMock, patch
 from types import SimpleNamespace
 from io import StringIO
@@ -12,6 +13,7 @@ import pytest
 import sapclimcp
 from sapclimcp import mcptools
 from sapclimcp.argparsertool import ArgParserTool
+from sapclimcp.toolpatches import SourceDataPatch
 
 
 @pytest.fixture
@@ -316,3 +318,98 @@ class TestSapcliCommandTool:
             'verify_ssl': False,
             'name_with_dash': 'test_value',
         })
+
+
+class TestSapcliCommandToolWithPatches:
+    """Integration tests: patch applied to ArgParserTool, SapcliCommandTool unaware."""
+
+    @pytest.mark.asyncio
+    @patch('sap.cli.adt_connection_from_args')
+    async def test_source_data_flows_through_patch(self, mock_adt_connection_from_args):
+        """Test source_data -> tempfile -> command reads correct content -> cleanup."""
+        mock_conn = MagicMock()
+        mock_adt_connection_from_args.return_value = mock_conn
+
+        source_content = 'REPORT zprog.\nWRITE: / "Hello".'
+        captured_source_path = []
+
+        def write_tool_fn(conn, args):
+            path = args.source[0]
+            captured_source_path.append(path)
+            assert os.path.exists(path)
+            with open(path, 'r', encoding='utf-8') as fobj:
+                assert fobj.read() == source_content
+
+        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args)
+        tester_tool_cmd = apt.add_parser('write')
+        tester_tool_cmd.add_argument('name')
+        tester_tool_cmd.add_argument('source', nargs='+')
+        tester_tool_cmd.set_defaults(execute=write_tool_fn)
+
+        tool = apt.tools['tester_write']
+
+        # Apply patch to ArgParserTool — just like transform_sapcli_commands does
+        SourceDataPatch().apply(tool)
+
+        # SapcliCommandTool is created with no patch knowledge
+        sct = mcptools.SapcliCommandTool.from_argparser_tool(tool)
+
+        # Verify MCP schema has source_data, not source
+        assert 'source_data' in sct.parameters['properties']
+        assert 'source' not in sct.parameters['properties']
+
+        await sct.run({
+            'ashost': 'localhost',
+            'client': '100',
+            'user': 'DEVELOPER',
+            'password': 'Welcome1!',
+            'port': 50001,
+            'name': 'ZPROG',
+            'source_data': source_content,
+        })
+
+        # Tempfile should be cleaned up after run
+        assert len(captured_source_path) == 1
+        assert not os.path.exists(captured_source_path[0])
+
+    @pytest.mark.asyncio
+    @patch('sap.cli.adt_connection_from_args')
+    async def test_cleanup_runs_on_command_error(self, mock_adt_connection_from_args):
+        """Test that tempfile cleanup runs even when the command raises SAPCliError."""
+        mock_conn = MagicMock()
+        mock_adt_connection_from_args.return_value = mock_conn
+
+        captured_source_path = []
+
+        def failing_write_fn(conn, args):
+            captured_source_path.append(args.source[0])
+            raise SAPCliError("Write failed")
+
+        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args)
+        tester_tool_cmd = apt.add_parser('write')
+        tester_tool_cmd.add_argument('name')
+        tester_tool_cmd.add_argument('source', nargs='+')
+        tester_tool_cmd.set_defaults(execute=failing_write_fn)
+
+        tool = apt.tools['tester_write']
+
+        SourceDataPatch().apply(tool)
+
+        sct = mcptools.SapcliCommandTool.from_argparser_tool(tool)
+
+        result = await sct.run({
+            'ashost': 'localhost',
+            'client': '100',
+            'user': 'DEVELOPER',
+            'password': 'Welcome1!',
+            'port': 50001,
+            'name': 'ZPROG',
+            'source_data': 'REPORT zprog.',
+        })
+
+        # Verify cleanup happened
+        assert len(captured_source_path) == 1
+        assert not os.path.exists(captured_source_path[0])
+
+        # Command error should be captured in the result
+        assert result.structured_content['result'][0] is False

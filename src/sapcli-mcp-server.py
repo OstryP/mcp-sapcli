@@ -15,12 +15,17 @@ VERIFIED_COMMANDS = [
     "abap_package_create",
     "abap_program_create",
     "abap_program_read",
+    "abap_program_write",
     "abap_program_activate",
     "abap_gcts_repolist",
     "abap_class_read",
+    "abap_class_write",
+    "abap_interface_write",
+    "abap_include_write",
     "abap_aunit_run",
     "abap_atc_run",
     "abap_ddl_read",
+    "abap_ddl_write",
 ]
 
 MCP_SERVER_INSTRUCTIONS = """

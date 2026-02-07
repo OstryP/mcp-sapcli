@@ -34,6 +34,7 @@ from fastmcp.tools.tool import ToolResult
 
 from sapclimcp import argparsertool
 from sapclimcp.argparsertool import ArgParserTool
+from sapclimcp.toolpatches import SourceDataPatch, apply_patches
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -350,6 +351,8 @@ def transform_sapcli_commands(server: FastMCP, allowed_commands: list[str] | Non
     # pylint: disable-next=fixme
     # TODO: add name transformations such as "abap_gcts_delete" to "abap_gcts_repo_delete"
 
+    patch_registry = [SourceDataPatch()]
+
     for tool_name, cmd_tool in args_tools.tools.items():
         # Skip tools without a command function (not meaningful commands)
         if cmd_tool.cmdfn is None:
@@ -359,5 +362,7 @@ def transform_sapcli_commands(server: FastMCP, allowed_commands: list[str] | Non
         if allowed_commands is not None and tool_name not in allowed_commands:
             _LOGGER.debug("Ignored tool: %s", tool_name)
             continue
+
+        apply_patches(tool_name, cmd_tool, patch_registry)
 
         server.add_tool(SapcliCommandTool.from_argparser_tool(cmd_tool))
