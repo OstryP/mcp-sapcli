@@ -36,11 +36,22 @@ pip install fastmcp pydantic pyodata
 
 ## Usage
 
-To start HTTP server localhost:8000 run the following bash command:
+To start HTTP server on localhost:8000 run the following bash command:
 
 ```bash
 python3 src/sapcli-mcp-server.py
 ```
+
+You can customize the host and port with command line arguments:
+
+```bash
+python3 src/sapcli-mcp-server.py --host 0.0.0.0 --port 9000
+```
+
+| Argument | Default     | Description                |
+|----------|-------------|----------------------------|
+| `--host` | `127.0.0.1` | Host address to bind to   |
+| `--port` | `8000`      | Port to listen on         |
 
 ## Tools
 

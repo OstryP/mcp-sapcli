@@ -59,6 +59,19 @@ def parse_args():
         help="Expose all meaningful sapcli commands as tools (not just verified ones)"
     )
 
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host address to bind to (default: 127.0.0.1)"
+    )
+
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to listen on (default: 8000)"
+    )
+
     return parser.parse_args()
 
 
@@ -81,4 +94,4 @@ def create_mcp_server(name: str = "sapcli", experimental: bool = False) -> FastM
 if __name__ == "__main__":
     args = parse_args()
     server = create_mcp_server(experimental=args.experimental)
-    server.run(transport="http", host="127.0.0.1", port=8000)
+    server.run(transport="http", host=args.host, port=args.port)
