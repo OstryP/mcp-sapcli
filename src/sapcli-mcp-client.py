@@ -38,6 +38,12 @@ def parse_args():
         help="List available tools (default)"
     )
     action_group.add_argument(
+        "--list-md",
+        action="store_true",
+        dest="list_tools_md",
+        help="List available tools in Markdown format (name and description)"
+    )
+    action_group.add_argument(
         "--inspect",
         metavar="TOOL",
         help="Print the definition of the specified tool"
@@ -94,6 +100,17 @@ async def list_tools(client):
         tools = await client.list_tools()
         for t in tools:
             print(t.name)
+
+
+async def list_tools_md(client):
+    """List available tools in Markdown format."""
+    async with client:
+        await client.ping()
+
+        tools = await client.list_tools()
+        for t in tools:
+            desc = (t.description or "").split("\n")[0].strip()
+            print(f"- **{t.name}** - {desc}")
 
 
 async def inspect_tool(client, tool_name: str):
@@ -316,6 +333,8 @@ async def main(client, args):
         await execute_tool(client)
     elif args.inspect:
         await inspect_tool(client, args.inspect)
+    elif args.list_tools_md:
+        await list_tools_md(client)
     else:
         await list_tools(client)
 
