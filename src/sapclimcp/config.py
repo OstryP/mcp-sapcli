@@ -24,11 +24,12 @@ class ConfigError(Exception):
     """Raised for configuration loading or validation errors."""
 
 
+_VALID_AUTH_TYPES = frozenset({'basic', 'cookie'})
+
+
 @dataclass
 class SystemConfig:
     """Connection settings for a single SAP system."""
-
-    VALID_AUTH_TYPES = frozenset({'basic', 'cookie'})
 
     ashost: str
     client: str
@@ -39,16 +40,17 @@ class SystemConfig:
 
     # basic auth
     user: str = ''
+    # password can be empty (some SAP dev systems allow passwordless accounts)
     password: str = ''
 
     # cookie auth
     cookie: str = ''
 
     def __post_init__(self) -> None:
-        if self.auth not in self.VALID_AUTH_TYPES:
+        if self.auth not in _VALID_AUTH_TYPES:
             raise ConfigError(
                 f"Invalid auth type '{self.auth}'. "
-                f"Must be one of: {', '.join(sorted(self.VALID_AUTH_TYPES))}"
+                f"Must be one of: {', '.join(sorted(_VALID_AUTH_TYPES))}"
             )
         if self.auth == 'cookie' and not self.cookie:
             raise ConfigError(
@@ -138,9 +140,9 @@ def load_config(path: str) -> ServerConfig:
         resolved = {k: _resolve_env_vars(v) for k, v in sys_raw.items()}
         try:
             systems[name] = SystemConfig(**resolved)
-        except TypeError as exc:
+        except (TypeError, ConfigError) as exc:
             raise ConfigError(
-                f"System '{name}' has invalid fields: {exc}"
+                f"System '{name}': {exc}"
             ) from exc
 
     default_system = raw.get('default_system')
@@ -160,6 +162,12 @@ class ConnectionManager:
     mid-session, subsequent calls will fail until the server is
     restarted with a fresh cookie. Cache invalidation and retry
     logic is planned as a future enhancement.
+
+    Note: the cache is not thread-safe. In stdio mode this is moot
+    (single-threaded). In HTTP mode, concurrent requests for the same
+    uncached system may create duplicate connections; the last write
+    wins and the other connection object is discarded. This is benign
+    since connections are lightweight and produce identical results.
     """
 
     def __init__(self, config: ServerConfig) -> None:
