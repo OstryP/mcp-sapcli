@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any, Callable, Optional
 
+import requests
+
 import sap.adt
 import sap.cli
 
@@ -252,7 +254,9 @@ class ConnectionManager:
             http_client = conn._http_client
             cookie_value = sys_config.cookie
 
-            import requests
+            # Mirrors sap.http.client.HTTPClient.build_session() from sapcli 1.x
+            # (sap/http/client.py:190-215) but replaces basic auth with cookie auth.
+            # Must be kept in sync with upstream changes to build_session().
             def cookie_build_session():
                 session = requests.Session()
                 session.auth = None

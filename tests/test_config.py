@@ -286,17 +286,32 @@ class TestConnectionManager:
 
     @patch('sap.cli.adt_connection_from_args')
     def test_cookie_auth_patches_build_session(self, mock_factory):
-        """Cookie auth replaces build_session on the HTTP client."""
+        """Cookie auth replaces build_session and injects cookie header."""
         mock_conn = MagicMock()
         mock_http_client = MagicMock()
+        mock_http_client.ssl_server_cert = None
+        mock_http_client.ssl_verify = False
+
+        mock_response = MagicMock()
+        mock_response.headers = {'x-csrf-token': 'test-csrf-token'}
+        mock_http_client.execute_with_session.return_value = mock_response
+
         mock_conn._http_client = mock_http_client
+        original_build_session = mock_http_client.build_session
         mock_factory.return_value = mock_conn
 
         mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
         mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
 
-        # build_session should have been replaced with our cookie version
-        assert mock_http_client.build_session != mock_http_client.build_session.__class__
+        # build_session was replaced with our cookie version
+        assert mock_http_client.build_session is not original_build_session
+        assert callable(mock_http_client.build_session)
+
+        # Call the patched build_session and verify behavior
+        session, response = mock_http_client.build_session()
+        assert session.auth is None
+        assert session.headers['Cookie'] == 'SAP_SESSION=abc'
+        assert session.headers['x-csrf-token'] == 'test-csrf-token'
 
     @patch('sap.cli.gcts_connection_from_args')
     def test_get_gcts_connection(self, mock_factory):
