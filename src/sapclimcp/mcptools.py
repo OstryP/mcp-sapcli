@@ -34,7 +34,7 @@ from fastmcp.tools.tool import ToolResult
 
 from sapclimcp import argparsertool
 from sapclimcp.argparsertool import ArgParserTool
-from sapclimcp.toolpatches import SourceDataPatch, apply_patches
+from sapclimcp.toolpatches import SourceDataPatch, ConnectionPatch, apply_patches
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -121,33 +121,36 @@ class OperationResult(NamedTuple):
     Contents: str
 
 
-def _run_adt_command(args: SimpleNamespace, command: CommandType):
-    try:
-        adt_conn = sap.cli.adt_connection_from_args(args)
-    except errors.SAPCliError as ex:
-        return OperationResult(
-                Success=False,
-                LogMessages=['Could not connect to ADT Server', str(ex)],
-                Contents=""
-            )
+def _run_adt_command(args: SimpleNamespace, command: CommandType, connection: Any = None):
+    if connection is None:
+        try:
+            connection = sap.cli.adt_connection_from_args(args)
+        except errors.SAPCliError as ex:
+            return OperationResult(
+                    Success=False,
+                    LogMessages=['Could not connect to ADT Server', str(ex)],
+                    Contents=""
+                )
 
-    return _run_sapcli_command(command, adt_conn, args)
+    return _run_sapcli_command(command, connection, args)
 
 
 def _run_gcts_command(
         args: SimpleNamespace,
         command: CommandType,
+        connection: Any = None,
 ) -> OperationResult:
-    try:
-        gcts_conn = sap.cli.gcts_connection_from_args(args)
-    except errors.SAPCliError as ex:
-        return OperationResult(
-                Success=False,
-                LogMessages=['Could not connect to ABAP HTTP Server', str(ex)],
-                Contents=""
-            )
+    if connection is None:
+        try:
+            connection = sap.cli.gcts_connection_from_args(args)
+        except errors.SAPCliError as ex:
+            return OperationResult(
+                    Success=False,
+                    LogMessages=['Could not connect to ABAP HTTP Server', str(ex)],
+                    Contents=""
+                )
 
-    return _run_sapcli_command(command, gcts_conn, args)
+    return _run_sapcli_command(command, connection, args)
 
 
 def _run_sapcli_command(command: CommandType, conn: SAPConnectionType, args: SimpleNamespace) -> OperationResult:
@@ -194,12 +197,16 @@ class SapcliCommandTool(Tool):
     This tool wraps sapcli commands transformed from ArgParserTool
     and executes them via the appropriate connection type.
     Supported connection types: ADT, gCTS.
+
+    When ``connection_manager`` is set, connections are resolved
+    server-side and the LLM never sees credential parameters.
     """
 
     # WTF is this?
     model_config = {'arbitrary_types_allowed': True}
 
     arg_tool: ArgParserTool
+    connection_manager: Any = None
 
     # HTTP connection parameter names used by ADT and gCTS
     HTTP_CONNECTION_PARAMS: ClassVar[FrozenSet[str]] = frozenset({
@@ -209,39 +216,42 @@ class SapcliCommandTool(Tool):
 
     def _run_adt(
             self,
-            cmd_args: SimpleNamespace
+            cmd_args: SimpleNamespace,
+            connection: Any = None,
     ) -> OperationResult:
         """Execute an ADT command.
 
         Args:
-            conn_conf: HTTP connection configuration.
             cmd_args: Command-specific arguments.
+            connection: Optional pre-built connection from ConnectionManager.
 
         Returns:
             OperationResult from the command execution.
         """
-        return _run_adt_command(cmd_args, self.arg_tool.cmdfn)
+        return _run_adt_command(cmd_args, self.arg_tool.cmdfn, connection)
 
     def _run_gcts(
             self,
-            cmd_args: SimpleNamespace
+            cmd_args: SimpleNamespace,
+            connection: Any = None,
     ) -> OperationResult:
         """Execute a gCTS command.
 
         Args:
-            conn_conf: HTTP connection configuration.
             cmd_args: Command-specific arguments.
+            connection: Optional pre-built connection from ConnectionManager.
 
         Returns:
             OperationResult from the command execution.
         """
-        return _run_gcts_command(cmd_args, self.arg_tool.cmdfn)
+        return _run_gcts_command(cmd_args, self.arg_tool.cmdfn, connection)
 
     async def run(self, arguments: dict[str, Any]) -> ToolResult:
         """Run the sapcli command with the given arguments.
 
         Args:
-            arguments: Dictionary containing connection parameters and command arguments.
+            arguments: Dictionary containing command arguments
+                (and optionally ``system`` when server-managed connections are used).
 
         Returns:
             ToolResult with the command output.
@@ -255,6 +265,19 @@ class SapcliCommandTool(Tool):
                 f"Tool '{self.name}' has no command function (cmdfn is None)"
             )
 
+        # Extract system before parse_args (not a sapcli argument)
+        system = arguments.pop('system', None)
+
+        # Resolve connection from manager if available
+        connection = None
+        if self.connection_manager is not None:
+            try:
+                connection = self.connection_manager.get_connection(
+                    system, self.arg_tool.conn_factory
+                )
+            except Exception as ex:
+                raise SapcliCommandToolError(str(ex))
+
         try:
             cmd_args = self.arg_tool.parse_args(arguments)
         except argparsertool.MissingArgument as ex:
@@ -262,10 +285,10 @@ class SapcliCommandTool(Tool):
 
         # pylint: disable-next=comparison-with-callable
         if self.arg_tool.conn_factory == sap.cli.adt_connection_from_args:
-            result = self._run_adt(cmd_args)
+            result = self._run_adt(cmd_args, connection)
         # pylint: disable-next=comparison-with-callable
         elif self.arg_tool.conn_factory == sap.cli.gcts_connection_from_args:
-            result = self._run_gcts(cmd_args)
+            result = self._run_gcts(cmd_args, connection)
         else:
             raise SapcliCommandToolError(
                 f"Tool '{self.name}' uses unsupported connection type. "
@@ -284,13 +307,15 @@ class SapcliCommandTool(Tool):
     def from_argparser_tool(
         cls,
         cmd: ArgParserTool,
-        description: str | None = None
+        description: str | None = None,
+        connection_manager: Any = None,
     ) -> 'SapcliCommandTool':
         """Create a SapcliCommandTool from an ArgParserTool.
 
         Args:
             cmd: The ArgParserTool containing command definition.
             description: Optional description for the tool.
+            connection_manager: Optional ConnectionManager for server-side connections.
 
         Returns:
             A new SapcliCommandTool instance.
@@ -307,14 +332,23 @@ class SapcliCommandTool(Tool):
             parameters=cmd.to_mcp_input_schema(),
             output_schema=output_schema,
             arg_tool=cmd,
+            connection_manager=connection_manager,
         )
 
 
-def transform_sapcli_commands(server: FastMCP, allowed_commands: list[str] | None = None):
+def transform_sapcli_commands(
+    server: FastMCP,
+    allowed_commands: list[str] | None = None,
+    connection_manager: Any = None,
+):
     """Transform sapcli commands into MCP tools and register them with the server.
 
     Args:
         server: The FastMCP server instance to register tools with.
+        allowed_commands: Optional list of tool names to expose. None = all.
+        connection_manager: Optional ConnectionManager for server-side connections.
+            When provided, connection parameters are stripped from tool schemas
+            and a ``system`` selector is added.
     """
     args_tools = ArgParserTool("abap", None)
     args_tools.add_properties(COMMON_CONNECTION_PARAMS)
@@ -354,6 +388,11 @@ def transform_sapcli_commands(server: FastMCP, allowed_commands: list[str] | Non
     # TODO: add name transformations such as "abap_gcts_delete" to "abap_gcts_repo_delete"
 
     patch_registry = [SourceDataPatch()]
+    if connection_manager is not None:
+        patch_registry.append(ConnectionPatch(
+            system_names=connection_manager.system_names,
+            default_system=connection_manager.default_system,
+        ))
 
     for tool_name, cmd_tool in args_tools.tools.items():
         # Skip tools without a command function (not meaningful commands)
@@ -367,4 +406,7 @@ def transform_sapcli_commands(server: FastMCP, allowed_commands: list[str] | Non
 
         apply_patches(tool_name, cmd_tool, patch_registry)
 
-        server.add_tool(SapcliCommandTool.from_argparser_tool(cmd_tool))
+        server.add_tool(SapcliCommandTool.from_argparser_tool(
+            cmd_tool,
+            connection_manager=connection_manager,
+        ))
