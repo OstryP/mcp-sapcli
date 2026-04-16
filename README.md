@@ -36,22 +36,68 @@ pip install fastmcp pydantic pyodata
 
 ## Usage
 
-To start HTTP server on localhost:8000 run the following bash command:
+### With server-side connection management (recommended)
+
+Create a config file (`sapcli-mcp.json`) with your SAP system definitions:
+
+```json
+{
+  "systems": {
+    "DEV": {
+      "ashost": "dev.sap.example.com",
+      "port": 443,
+      "client": "001",
+      "ssl": true,
+      "verify": false,
+      "auth": "cookie",
+      "cookie": "$SAP_COOKIE_DEV"
+    }
+  },
+  "default_system": "DEV"
+}
+```
+
+Values starting with `$` are resolved from environment variables at startup.
+This lets you commit the config file while keeping secrets in the environment.
+
+Auth types:
+- `"basic"` (default) — uses `user` and `password` fields
+- `"cookie"` — uses `cookie` field (for SSO environments)
+
+Start the server in **stdio** mode (for Claude Code / MCP clients):
+
+```bash
+SAP_COOKIE_DEV="sap-usercontext=..." python3 src/sapcli-mcp-server.py --stdio --config sapcli-mcp.json
+```
+
+With this setup, **credentials are never visible to the LLM**. Tools only
+expose business parameters (e.g., class name, program name) and an optional
+`system` selector when multiple systems are configured.
+
+### Without config (legacy mode)
+
+To start HTTP server on localhost:8000 without server-side connection management:
 
 ```bash
 python3 src/sapcli-mcp-server.py
 ```
 
-You can customize the host and port with command line arguments:
+In this mode, every tool call requires connection parameters (ashost, client,
+user, password, etc.) to be provided by the caller.
+
+You can customize the host and port with command line arguments (HTTP mode):
 
 ```bash
 python3 src/sapcli-mcp-server.py --host 0.0.0.0 --port 9000
 ```
 
-| Argument | Default     | Description                |
-|----------|-------------|----------------------------|
-| `--host` | `127.0.0.1` | Host address to bind to   |
-| `--port` | `8000`      | Port to listen on         |
+| Argument         | Default     | Description                                        |
+|------------------|-------------|----------------------------------------------------|
+| `--config`       | (none)      | Path to JSON config file (env: `SAPCLI_MCP_CONFIG`)|
+| `--stdio`        | (off)       | Run in stdio transport mode                        |
+| `--experimental` | (off)       | Expose all sapcli commands, not just verified ones  |
+| `--host`         | `127.0.0.1` | Host address to bind to (HTTP mode only)           |
+| `--port`         | `8000`      | Port to listen on (HTTP mode only)                 |
 
 ## Tools
 
