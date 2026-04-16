@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sapclimcp.toolpatches import ToolPatch, SourceDataPatch
+from sapclimcp.toolpatches import ToolPatch, SourceDataPatch, ConnectionPatch
 from sapclimcp.argparsertool import ArgParserTool
 
 
@@ -210,3 +210,112 @@ class TestSourceDataPatchApply:
 
         assert len(captured_paths) == 2
         assert captured_paths[0] != captured_paths[1]
+
+
+# ---------------------------------------------------------------------------
+# ConnectionPatch
+# ---------------------------------------------------------------------------
+
+
+class TestConnectionPatchAppliesTo:
+    """Tests for ConnectionPatch.applies_to()."""
+
+    def test_positive_tool_with_connection_params(self):
+        tool = SimpleNamespace(
+            input_schema=SimpleNamespace(
+                properties={'ashost': {'type': 'string'}, 'name': {'type': 'string'}}
+            )
+        )
+        patch = ConnectionPatch(['DEV'], 'DEV')
+        assert patch.applies_to('some_tool', tool) is True
+
+    def test_negative_tool_without_connection_params(self):
+        tool = SimpleNamespace(
+            input_schema=SimpleNamespace(
+                properties={'name': {'type': 'string'}, 'type': {'type': 'string'}}
+            )
+        )
+        patch = ConnectionPatch(['DEV'], 'DEV')
+        assert patch.applies_to('some_tool', tool) is False
+
+
+class TestConnectionPatchApply:
+    """Tests for ConnectionPatch.apply() — schema transformation."""
+
+    @staticmethod
+    def _make_tool_with_connection_params():
+        """Create an ArgParserTool with typical connection + business params."""
+        apt = ArgParserTool('tester', None)
+        apt.add_properties({
+            'ashost': {'type': 'string'},
+            'client': {'type': 'string'},
+            'user': {'type': 'string'},
+            'password': {'type': 'string'},
+        })
+        tool = apt.add_parser('read')
+        tool.add_properties({
+            'port': {'type': 'integer'},
+            'ssl': {'type': 'boolean'},
+            'verify': {'type': 'boolean'},
+        })
+        tool.add_argument('name')
+        return apt.tools['tester_read']
+
+    def test_strips_all_connection_params(self):
+        tool = self._make_tool_with_connection_params()
+        patch = ConnectionPatch(['DEV'], 'DEV')
+        patch.apply(tool)
+
+        props = tool.input_schema.properties
+        for param in ConnectionPatch.CONNECTION_PARAMS:
+            assert param not in props, f'{param} should be stripped'
+
+        assert 'name' in props  # business param preserved
+
+    def test_strips_from_required(self):
+        tool = self._make_tool_with_connection_params()
+        patch = ConnectionPatch(['DEV'], 'DEV')
+        patch.apply(tool)
+
+        for param in ConnectionPatch.CONNECTION_PARAMS:
+            assert param not in tool.input_schema.required
+
+    def test_single_system_adds_optional_system_param(self):
+        tool = self._make_tool_with_connection_params()
+        patch = ConnectionPatch(['DEV'], 'DEV')
+        patch.apply(tool)
+
+        assert 'system' in tool.input_schema.properties
+        assert tool.input_schema.properties['system']['default'] == 'DEV'
+        assert 'system' not in tool.input_schema.required
+
+    def test_multi_system_with_default_adds_optional_system(self):
+        tool = self._make_tool_with_connection_params()
+        patch = ConnectionPatch(['DEV', 'QA'], 'DEV')
+        patch.apply(tool)
+
+        assert 'system' in tool.input_schema.properties
+        assert 'system' not in tool.input_schema.required
+        desc = tool.input_schema.properties['system']['description']
+        assert 'DEV' in desc
+        assert 'QA' in desc
+
+    def test_multi_system_no_default_requires_system(self):
+        tool = self._make_tool_with_connection_params()
+        patch = ConnectionPatch(['DEV', 'QA'], None)
+        patch.apply(tool)
+
+        assert 'system' in tool.input_schema.properties
+        assert 'system' in tool.input_schema.required
+
+    def test_schema_reflected_in_mcp_output(self):
+        tool = self._make_tool_with_connection_params()
+        patch = ConnectionPatch(['DEV', 'QA'], 'DEV')
+        patch.apply(tool)
+
+        schema = tool.to_mcp_input_schema()
+        for param in ConnectionPatch.CONNECTION_PARAMS:
+            assert param not in schema['properties']
+        assert 'system' in schema['properties']
+        assert 'name' in schema['properties']
+
