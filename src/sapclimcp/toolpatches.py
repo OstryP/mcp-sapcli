@@ -11,7 +11,7 @@ import tempfile
 from abc import ABC, abstractmethod
 from types import SimpleNamespace
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Optional
 
 
 class ToolPatch(ABC):
@@ -101,6 +101,64 @@ class SourceDataPatch(ToolPatch):
                     pass
 
         tool.cmdfn = wrapped_cmdfn
+
+
+class ConnectionPatch(ToolPatch):
+    """Strip connection parameters from tool schemas and add a system selector.
+
+    When the server manages connections server-side, the LLM should not
+    see or provide ``ashost``, ``client``, ``user``, ``password``, etc.
+    This patch:
+
+    - Removes all connection parameters from the tool's input schema
+    - Adds an optional ``system`` parameter when multiple systems are
+      configured (or a single system with a default)
+    """
+
+    CONNECTION_PARAMS = frozenset({
+        'ashost', 'port', 'client', 'user', 'password',
+        'ssl', 'verify', 'sysnr',
+    })
+
+    def __init__(
+        self,
+        system_names: list[str],
+        default_system: Optional[str] = None,
+    ) -> None:
+        self._system_names = system_names
+        self._default_system = default_system
+
+    def applies_to(self, tool_name: str, tool: Any) -> bool:
+        return bool(
+            self.CONNECTION_PARAMS & set(tool.input_schema.properties.keys())
+        )
+
+    def apply(self, tool: Any) -> None:
+        schema = tool.input_schema
+
+        for param in self.CONNECTION_PARAMS:
+            schema.properties.pop(param, None)
+            if param in schema.required:
+                schema.required.remove(param)
+
+        if len(self._system_names) > 1:
+            desc = f'Target SAP system. Available: {", ".join(self._system_names)}'
+            if self._default_system:
+                desc += f'. Default: {self._default_system}'
+            schema.properties['system'] = {
+                'type': 'string',
+                'description': desc,
+                'enum': self._system_names,
+            }
+            if not self._default_system:
+                schema.required.append('system')
+        elif len(self._system_names) == 1:
+            schema.properties['system'] = {
+                'type': 'string',
+                'description': f'Target SAP system (default: {self._system_names[0]})',
+                'default': self._system_names[0],
+                'enum': self._system_names,
+            }
 
 
 def apply_patches(
