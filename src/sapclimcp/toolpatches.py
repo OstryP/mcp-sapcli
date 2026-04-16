@@ -148,6 +148,7 @@ class ConnectionPatch(ToolPatch):
             schema.properties['system'] = {
                 'type': 'string',
                 'description': desc,
+                'enum': self._system_names,
             }
             if not self._default_system:
                 schema.required.append('system')
@@ -156,6 +157,7 @@ class ConnectionPatch(ToolPatch):
                 'type': 'string',
                 'description': f'Target SAP system (default: {self._system_names[0]})',
                 'default': self._system_names[0],
+                'enum': self._system_names,
             }
 
 

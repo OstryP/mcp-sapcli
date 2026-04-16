@@ -413,3 +413,114 @@ class TestSapcliCommandToolWithPatches:
 
         # Command error should be captured in the result
         assert result.structured_content['result'][0] is False
+
+
+class TestSapcliCommandToolWithConnectionManager:
+    """Integration tests: server-side connection management via ConnectionManager."""
+
+    @pytest.mark.asyncio
+    @patch('sap.cli.adt_connection_from_args')
+    async def test_connection_flows_through_to_command(self, mock_adt_factory):
+        """Happy path: connection_manager provides connection, command receives it."""
+        mock_conn = MagicMock()
+        mock_manager = MagicMock()
+        mock_manager.get_connection.return_value = mock_conn
+
+        received_conns = []
+
+        def tool_fn(conn, args):
+            received_conns.append(conn)
+
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args)
+        tool = apt.add_parser('read')
+        tool.add_argument('name')
+        tool.set_defaults(execute=tool_fn)
+
+        cmd_tool = apt.tools['tester_read']
+        sct = mcptools.SapcliCommandTool.from_argparser_tool(
+            cmd_tool, connection_manager=mock_manager,
+        )
+
+        await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+
+        mock_manager.get_connection.assert_called_once_with(
+            'DEV', sap.cli.adt_connection_from_args
+        )
+        assert received_conns == [mock_conn]
+        # adt_connection_from_args should NOT be called — manager provides connection
+        mock_adt_factory.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_system_popped_before_parse_args(self):
+        """system parameter is removed from arguments before parse_args sees them."""
+        mock_conn = MagicMock()
+        mock_manager = MagicMock()
+        mock_manager.get_connection.return_value = mock_conn
+
+        received_args = []
+
+        def tool_fn(conn, args):
+            received_args.append(args)
+
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args)
+        tool = apt.add_parser('read')
+        tool.add_argument('name')
+        tool.set_defaults(execute=tool_fn)
+
+        cmd_tool = apt.tools['tester_read']
+        sct = mcptools.SapcliCommandTool.from_argparser_tool(
+            cmd_tool, connection_manager=mock_manager,
+        )
+
+        await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+
+        assert len(received_args) == 1
+        assert not hasattr(received_args[0], 'system')
+        assert received_args[0].name == 'TEST_OBJ'
+
+    @pytest.mark.asyncio
+    async def test_config_error_maps_to_tool_error(self):
+        """ConfigError from connection_manager is converted to SapcliCommandToolError."""
+        from sapclimcp.config import ConfigError
+
+        mock_manager = MagicMock()
+        mock_manager.get_connection.side_effect = ConfigError("Unknown system 'BAD'")
+
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args)
+        tool = apt.add_parser('read')
+        tool.add_argument('name')
+        tool.set_defaults(execute=MagicMock())
+
+        cmd_tool = apt.tools['tester_read']
+        sct = mcptools.SapcliCommandTool.from_argparser_tool(
+            cmd_tool, connection_manager=mock_manager,
+        )
+
+        with pytest.raises(mcptools.SapcliCommandToolError, match="Unknown system 'BAD'"):
+            await sct.run({'name': 'TEST_OBJ', 'system': 'BAD'})
+
+    @pytest.mark.asyncio
+    async def test_default_system_when_system_not_provided(self):
+        """When system is not in arguments, None is passed to connection_manager."""
+        mock_conn = MagicMock()
+        mock_manager = MagicMock()
+        mock_manager.get_connection.return_value = mock_conn
+
+        def tool_fn(conn, args):
+            pass
+
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args)
+        tool = apt.add_parser('read')
+        tool.add_argument('name')
+        tool.set_defaults(execute=tool_fn)
+
+        cmd_tool = apt.tools['tester_read']
+        sct = mcptools.SapcliCommandTool.from_argparser_tool(
+            cmd_tool, connection_manager=mock_manager,
+        )
+
+        await sct.run({'name': 'TEST_OBJ'})
+
+        mock_manager.get_connection.assert_called_once_with(
+            None, sap.cli.adt_connection_from_args
+        )

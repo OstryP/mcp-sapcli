@@ -8,6 +8,7 @@ import os
 from fastmcp import FastMCP
 
 from sapclimcp.mcptools import transform_sapcli_commands
+from sapclimcp.config import load_config, ConnectionManager
 
 # List of verified and supported sapcli commands exposed as MCP tools
 VERIFIED_COMMANDS = [
@@ -119,7 +120,6 @@ def create_mcp_server(
     connection_manager = None
 
     if config_path:
-        from sapclimcp.config import load_config, ConnectionManager
         server_config = load_config(config_path)
         connection_manager = ConnectionManager(server_config)
 

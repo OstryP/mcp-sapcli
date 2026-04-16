@@ -35,6 +35,7 @@ from fastmcp.tools.tool import ToolResult
 from sapclimcp import argparsertool
 from sapclimcp.argparsertool import ArgParserTool
 from sapclimcp.toolpatches import SourceDataPatch, ConnectionPatch, apply_patches
+from sapclimcp.config import ConfigError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -266,7 +267,9 @@ class SapcliCommandTool(Tool):
             )
 
         # Extract system before parse_args (not a sapcli argument)
-        system = arguments.pop('system', None)
+        system = arguments.get('system')
+        if 'system' in arguments:
+            del arguments['system']
 
         # Resolve connection from manager if available
         connection = None
@@ -275,7 +278,7 @@ class SapcliCommandTool(Tool):
                 connection = self.connection_manager.get_connection(
                     system, self.arg_tool.conn_factory
                 )
-            except Exception as ex:
+            except ConfigError as ex:
                 raise SapcliCommandToolError(str(ex))
 
         try:

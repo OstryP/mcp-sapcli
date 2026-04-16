@@ -138,6 +138,11 @@ class ConnectionManager:
 
     Connections are created lazily on first use and reused for
     subsequent calls to the same system with the same connection type.
+
+    Note: the cache has no TTL or invalidation. If a cookie expires
+    mid-session, subsequent calls will fail until the server is
+    restarted with a fresh cookie. Cache invalidation and retry
+    logic is planned as a future enhancement.
     """
 
     def __init__(self, config: ServerConfig) -> None:
@@ -194,6 +199,8 @@ class ConnectionManager:
             port=sys_config.port,
             ssl=sys_config.ssl,
             verify=sys_config.verify,
+            # sapcli requires non-empty user/password to construct
+            # the Connection object even when cookie auth is used
             user=sys_config.user or 'dummy',
             password=sys_config.password or 'dummy',
             ssl_server_cert=None,
@@ -206,6 +213,14 @@ class ConnectionManager:
         conn = sap.cli.adt_connection_from_args(args)
 
         if sys_config.auth == 'cookie' and sys_config.cookie:
+            # Inject cookie into the HTTP session and disable basic auth.
+            # Uses sap.adt.Connection._get_session() which is a private API.
+            # Tested against sapcli 0.x — may need updating if internals change.
+            if not hasattr(conn, '_get_session'):
+                raise ConfigError(
+                    'Cookie auth requires sap.adt.Connection._get_session(). '
+                    'This sapcli version may not be compatible.'
+                )
             session = conn._get_session()
             session.headers['Cookie'] = sys_config.cookie
             session.auth = None
@@ -214,6 +229,12 @@ class ConnectionManager:
 
     def _create_gcts_connection(self, sys_config: SystemConfig) -> Any:
         """Create a gCTS connection."""
+
+        if sys_config.auth == 'cookie':
+            raise ConfigError(
+                'Cookie auth is not supported for gCTS connections. '
+                'Use basic auth for gCTS systems.'
+            )
 
         args = self._make_connection_args(sys_config)
         return sap.cli.gcts_connection_from_args(args)
