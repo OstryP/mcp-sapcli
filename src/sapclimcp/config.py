@@ -28,6 +28,8 @@ class ConfigError(Exception):
 class SystemConfig:
     """Connection settings for a single SAP system."""
 
+    VALID_AUTH_TYPES = frozenset({'basic', 'cookie'})
+
     ashost: str
     client: str
     port: int = 443
@@ -41,6 +43,21 @@ class SystemConfig:
 
     # cookie auth
     cookie: str = ''
+
+    def __post_init__(self) -> None:
+        if self.auth not in self.VALID_AUTH_TYPES:
+            raise ConfigError(
+                f"Invalid auth type '{self.auth}'. "
+                f"Must be one of: {', '.join(sorted(self.VALID_AUTH_TYPES))}"
+            )
+        if self.auth == 'cookie' and not self.cookie:
+            raise ConfigError(
+                "Cookie auth requires a non-empty 'cookie' field"
+            )
+        if self.auth == 'basic' and not self.user:
+            raise ConfigError(
+                "Basic auth requires a non-empty 'user' field"
+            )
 
 
 @dataclass
@@ -212,7 +229,7 @@ class ConnectionManager:
         args = self._make_connection_args(sys_config)
         conn = sap.cli.adt_connection_from_args(args)
 
-        if sys_config.auth == 'cookie' and sys_config.cookie:
+        if sys_config.auth == 'cookie':
             # Inject cookie into the HTTP session and disable basic auth.
             # Uses sap.adt.Connection._get_session() which is a private API.
             # Tested against sapcli 0.x — may need updating if internals change.

@@ -69,6 +69,7 @@ class TestLoadConfig:
                     'ashost': 'dev.example.com',
                     'client': '100',
                     'port': 443,
+                    'user': 'admin',
                 }
             }
         })
@@ -104,8 +105,8 @@ class TestLoadConfig:
     def test_multi_system_with_default(self):
         path = _write_json({
             'systems': {
-                'DEV': {'ashost': 'dev.example.com', 'client': '100'},
-                'QA': {'ashost': 'qa.example.com', 'client': '200'},
+                'DEV': {'ashost': 'dev.example.com', 'client': '100', 'user': 'u'},
+                'QA': {'ashost': 'qa.example.com', 'client': '200', 'user': 'u'},
             },
             'default_system': 'DEV',
         })
@@ -119,8 +120,8 @@ class TestLoadConfig:
     def test_multi_system_no_default(self):
         path = _write_json({
             'systems': {
-                'DEV': {'ashost': 'dev.example.com', 'client': '100'},
-                'QA': {'ashost': 'qa.example.com', 'client': '200'},
+                'DEV': {'ashost': 'dev.example.com', 'client': '100', 'user': 'u'},
+                'QA': {'ashost': 'qa.example.com', 'client': '200', 'user': 'u'},
             },
         })
         try:
@@ -132,7 +133,7 @@ class TestLoadConfig:
     def test_bad_default_system_raises(self):
         path = _write_json({
             'systems': {
-                'DEV': {'ashost': 'dev.example.com', 'client': '100'},
+                'DEV': {'ashost': 'dev.example.com', 'client': '100', 'user': 'u'},
             },
             'default_system': 'NONEXISTENT',
         })
@@ -191,13 +192,13 @@ class TestLoadConfig:
 
 class TestServerConfig:
     def test_single_system_auto_default(self):
-        cfg = ServerConfig(systems={'DEV': SystemConfig(ashost='h', client='c')})
+        cfg = ServerConfig(systems={'DEV': SystemConfig(ashost='h', client='c', user='u')})
         assert cfg.default_system == 'DEV'
 
     def test_multi_system_no_auto_default(self):
         cfg = ServerConfig(systems={
-            'A': SystemConfig(ashost='a', client='1'),
-            'B': SystemConfig(ashost='b', client='2'),
+            'A': SystemConfig(ashost='a', client='1', user='u'),
+            'B': SystemConfig(ashost='b', client='2', user='u'),
         })
         assert cfg.default_system is None
 
@@ -275,8 +276,8 @@ class TestConnectionManager:
     def test_no_default_no_system_raises(self):
         cfg = ServerConfig(
             systems={
-                'A': SystemConfig(ashost='a', client='1'),
-                'B': SystemConfig(ashost='b', client='2'),
+                'A': SystemConfig(ashost='a', client='1', user='u'),
+                'B': SystemConfig(ashost='b', client='2', user='u'),
             },
         )
         mgr = ConnectionManager(cfg)
@@ -312,3 +313,46 @@ class TestConnectionManager:
         mgr = self._make_manager()
         with pytest.raises(ConfigError, match='Unsupported connection factory'):
             mgr.get_connection('DEV', lambda args: None)
+
+    def test_gcts_cookie_auth_raises(self):
+        mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
+        with pytest.raises(ConfigError, match='not supported for gCTS'):
+            mgr.get_connection('DEV', sap.cli.gcts_connection_from_args)
+
+    @patch('sap.cli.adt_connection_from_args')
+    def test_hasattr_guard_on_get_session(self, mock_factory):
+        """ConfigError raised when connection lacks _get_session."""
+        mock_conn = MagicMock(spec=[])  # empty spec — no _get_session
+        mock_factory.return_value = mock_conn
+
+        mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
+        with pytest.raises(ConfigError, match='_get_session'):
+            mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+
+
+# ---------------------------------------------------------------------------
+# SystemConfig validation
+# ---------------------------------------------------------------------------
+
+
+class TestSystemConfigValidation:
+
+    def test_invalid_auth_type_raises(self):
+        with pytest.raises(ConfigError, match="Invalid auth type 'cookies'"):
+            SystemConfig(ashost='h', client='c', auth='cookies')
+
+    def test_cookie_auth_without_cookie_raises(self):
+        with pytest.raises(ConfigError, match='non-empty'):
+            SystemConfig(ashost='h', client='c', auth='cookie', cookie='')
+
+    def test_basic_auth_without_user_raises(self):
+        with pytest.raises(ConfigError, match='non-empty'):
+            SystemConfig(ashost='h', client='c', auth='basic', user='')
+
+    def test_valid_basic_auth(self):
+        cfg = SystemConfig(ashost='h', client='c', user='admin', password='pass')
+        assert cfg.auth == 'basic'
+
+    def test_valid_cookie_auth(self):
+        cfg = SystemConfig(ashost='h', client='c', auth='cookie', cookie='SAP=abc')
+        assert cfg.auth == 'cookie'

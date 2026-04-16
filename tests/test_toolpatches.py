@@ -287,6 +287,7 @@ class TestConnectionPatchApply:
 
         assert 'system' in tool.input_schema.properties
         assert tool.input_schema.properties['system']['default'] == 'DEV'
+        assert tool.input_schema.properties['system']['enum'] == ['DEV']
         assert 'system' not in tool.input_schema.required
 
     def test_multi_system_with_default_adds_optional_system(self):
@@ -296,6 +297,7 @@ class TestConnectionPatchApply:
 
         assert 'system' in tool.input_schema.properties
         assert 'system' not in tool.input_schema.required
+        assert tool.input_schema.properties['system']['enum'] == ['DEV', 'QA']
         desc = tool.input_schema.properties['system']['description']
         assert 'DEV' in desc
         assert 'QA' in desc
