@@ -27,6 +27,7 @@ def sample_adt_config():
         'password': 'secret123',
         'ssl': True,
         'verify': False,
+        'ssl_server_cert': None,
     }
 
 
