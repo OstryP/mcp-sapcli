@@ -238,17 +238,47 @@ class ConnectionManager:
         conn = sap.cli.adt_connection_from_args(args)
 
         if sys_config.auth == 'cookie':
-            # Inject cookie into the HTTP session and disable basic auth.
-            # Uses sap.adt.Connection._get_session() which is a private API.
-            # Tested against sapcli 0.x — may need updating if internals change.
-            if not hasattr(conn, '_get_session'):
+            # Inject cookie auth by patching the HTTP client's build_session
+            # to set cookies and remove basic auth before the first request.
+            # This is necessary because sapcli's build_session() authenticates
+            # during session creation (CSRF token fetch).
+            # Uses private APIs on sap.adt.Connection — tested against sapcli 1.x,
+            # may need updating if internals change.
+            if not hasattr(conn, '_http_client'):
                 raise ConfigError(
-                    'Cookie auth requires sap.adt.Connection._get_session(). '
+                    'Cookie auth requires sap.adt.Connection._http_client. '
                     'This sapcli version may not be compatible.'
                 )
-            session = conn._get_session()
-            session.headers['Cookie'] = sys_config.cookie
-            session.auth = None
+            http_client = conn._http_client
+            cookie_value = sys_config.cookie
+
+            import requests
+            def cookie_build_session():
+                session = requests.Session()
+                session.auth = None
+                session.headers['Cookie'] = cookie_value
+
+                if http_client.ssl_server_cert:
+                    session.verify = http_client.ssl_server_cert
+                elif http_client.ssl_verify is False:
+                    import urllib3
+                    urllib3.disable_warnings()
+                    session.verify = False
+
+                login_headers = {'x-csrf-token': 'Fetch'}
+                response = http_client.execute_with_session(
+                    session, http_client.login_method,
+                    http_client.login_path, headers=login_headers,
+                )
+
+                if 'x-csrf-token' in response.headers:
+                    session.headers.update({
+                        'x-csrf-token': response.headers['x-csrf-token']
+                    })
+
+                return session, response
+
+            http_client.build_session = cookie_build_session
 
         return conn
 

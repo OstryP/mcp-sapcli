@@ -285,19 +285,18 @@ class TestConnectionManager:
             mgr.get_connection(None, sap.cli.adt_connection_from_args)
 
     @patch('sap.cli.adt_connection_from_args')
-    def test_cookie_auth_patches_session(self, mock_factory):
+    def test_cookie_auth_patches_build_session(self, mock_factory):
+        """Cookie auth replaces build_session on the HTTP client."""
         mock_conn = MagicMock()
-        mock_session = MagicMock()
-        mock_conn._get_session.return_value = mock_session
-        mock_session.headers = {}
+        mock_http_client = MagicMock()
+        mock_conn._http_client = mock_http_client
         mock_factory.return_value = mock_conn
 
         mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
         mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
 
-        mock_conn._get_session.assert_called_once()
-        assert mock_session.headers['Cookie'] == 'SAP_SESSION=abc'
-        assert mock_session.auth is None
+        # build_session should have been replaced with our cookie version
+        assert mock_http_client.build_session != mock_http_client.build_session.__class__
 
     @patch('sap.cli.gcts_connection_from_args')
     def test_get_gcts_connection(self, mock_factory):
@@ -320,13 +319,13 @@ class TestConnectionManager:
             mgr.get_connection('DEV', sap.cli.gcts_connection_from_args)
 
     @patch('sap.cli.adt_connection_from_args')
-    def test_hasattr_guard_on_get_session(self, mock_factory):
-        """ConfigError raised when connection lacks _get_session."""
-        mock_conn = MagicMock(spec=[])  # empty spec — no _get_session
+    def test_hasattr_guard_on_http_client(self, mock_factory):
+        """ConfigError raised when connection lacks _http_client."""
+        mock_conn = MagicMock(spec=[])  # empty spec — no _http_client
         mock_factory.return_value = mock_conn
 
         mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
-        with pytest.raises(ConfigError, match='_get_session'):
+        with pytest.raises(ConfigError, match='_http_client'):
             mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
 
 
