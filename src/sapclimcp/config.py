@@ -9,6 +9,7 @@ and manages cached connections per system.
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any, Callable, Optional
@@ -154,16 +155,27 @@ def load_config(path: str) -> ServerConfig:
     return ServerConfig(systems=systems, default_system=default_system)
 
 
+DEFAULT_CACHE_TTL = 3600
+
+
+@dataclass
+class _CacheEntry:
+    """A cached connection with its creation timestamp."""
+
+    connection: Any
+    created_at: float
+
+
 class ConnectionManager:
     """Manages cached SAP connections per system and connection type.
 
     Connections are created lazily on first use and reused for
     subsequent calls to the same system with the same connection type.
 
-    Note: the cache has no TTL or invalidation. If a cookie expires
-    mid-session, subsequent calls will fail until the server is
-    restarted with a fresh cookie. Cache invalidation and retry
-    logic is planned as a future enhancement.
+    Cached connections expire after ``cache_ttl_seconds`` (default 1 hour).
+    When a TTL-expired entry is requested, it is discarded and a fresh
+    connection is created transparently.  The ``evict()`` method allows
+    callers to force immediate removal (e.g. after an auth failure).
 
     Note: the cache is not thread-safe. In stdio mode this is moot
     (single-threaded). In HTTP mode, concurrent requests for the same
@@ -172,9 +184,14 @@ class ConnectionManager:
     since connections are lightweight and produce identical results.
     """
 
-    def __init__(self, config: ServerConfig) -> None:
+    def __init__(
+        self,
+        config: ServerConfig,
+        cache_ttl_seconds: float = DEFAULT_CACHE_TTL,
+    ) -> None:
         self._config = config
-        self._cache: dict[tuple[str, str], Any] = {}
+        self._cache: dict[tuple[str, str], _CacheEntry] = {}
+        self._cache_ttl = cache_ttl_seconds
 
     @property
     def system_names(self) -> list[str]:
@@ -298,12 +315,58 @@ class ConnectionManager:
         args = self._make_connection_args(sys_config)
         return sap.cli.gcts_connection_from_args(args)
 
+    def _resolve_conn_type(self, conn_factory: Callable) -> str:
+        """Map a sapcli connection factory to a connection type string.
+
+        Raises:
+            ConfigError: If the factory is not recognized.
+        """
+
+        if conn_factory is sap.cli.adt_connection_from_args:
+            return 'adt'
+        if conn_factory is sap.cli.gcts_connection_from_args:
+            return 'gcts'
+
+        raise ConfigError(
+            f"Unsupported connection factory: {conn_factory}. "
+            "Only ADT and gCTS connections are supported."
+        )
+
+    def evict(
+        self,
+        system_name: Optional[str],
+        conn_factory: Callable,
+    ) -> None:
+        """Remove a cached connection, forcing recreation on next access.
+
+        Args:
+            system_name: System name or None for default.
+            conn_factory: The sapcli connection factory function.
+
+        No-op if the connection is not cached or the system/factory
+        cannot be resolved (avoids raising during error recovery).
+        """
+
+        resolved_name = system_name or self._config.default_system
+        if resolved_name is None:
+            return
+
+        try:
+            conn_type = self._resolve_conn_type(conn_factory)
+        except ConfigError:
+            return
+
+        self._cache.pop((resolved_name, conn_type), None)
+
     def get_connection(
         self,
         system_name: Optional[str],
         conn_factory: Callable,
     ) -> Any:
         """Get or create a cached connection for the given system.
+
+        Returns a cached connection if one exists and has not exceeded
+        the TTL. Otherwise creates a fresh connection and caches it.
 
         Args:
             system_name: System name or None for default.
@@ -321,22 +384,23 @@ class ConnectionManager:
         sys_config = self._resolve_system(system_name)
         resolved_name = system_name or self._config.default_system
 
-        # Determine connection type from factory
-        if conn_factory is sap.cli.adt_connection_from_args:
-            conn_type = 'adt'
-        elif conn_factory is sap.cli.gcts_connection_from_args:
-            conn_type = 'gcts'
-        else:
-            raise ConfigError(
-                f"Unsupported connection factory: {conn_factory}. "
-                "Only ADT and gCTS connections are supported."
-            )
+        conn_type = self._resolve_conn_type(conn_factory)
 
         cache_key = (resolved_name, conn_type)
-        if cache_key not in self._cache:
-            if conn_type == 'adt':
-                self._cache[cache_key] = self._create_adt_connection(sys_config)
-            else:
-                self._cache[cache_key] = self._create_gcts_connection(sys_config)
+        entry = self._cache.get(cache_key)
 
-        return self._cache[cache_key]
+        if entry is not None:
+            age = time.monotonic() - entry.created_at
+            if age >= self._cache_ttl:
+                del self._cache[cache_key]
+                entry = None
+
+        if entry is None:
+            if conn_type == 'adt':
+                conn = self._create_adt_connection(sys_config)
+            else:
+                conn = self._create_gcts_connection(sys_config)
+            entry = _CacheEntry(connection=conn, created_at=time.monotonic())
+            self._cache[cache_key] = entry
+
+        return entry.connection

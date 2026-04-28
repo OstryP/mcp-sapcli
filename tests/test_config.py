@@ -345,6 +345,126 @@ class TestConnectionManager:
 
 
 # ---------------------------------------------------------------------------
+# ConnectionManager — TTL and eviction
+# ---------------------------------------------------------------------------
+
+
+class TestConnectionManagerTTL:
+
+    @staticmethod
+    def _make_manager(cache_ttl_seconds=3600, **overrides) -> ConnectionManager:
+        sys_config = SystemConfig(
+            ashost='test.example.com',
+            client='100',
+            port=443,
+            user='admin',
+            password='secret',
+            **overrides,
+        )
+        cfg = ServerConfig(systems={'DEV': sys_config}, default_system='DEV')
+        return ConnectionManager(cfg, cache_ttl_seconds=cache_ttl_seconds)
+
+    @patch('sapclimcp.config.time.monotonic')
+    @patch('sap.cli.adt_connection_from_args')
+    def test_ttl_expired_connection_recreated(self, mock_factory, mock_time):
+        """After TTL expires, get_connection must create a new connection."""
+        conn_first = MagicMock(name='conn_first')
+        conn_second = MagicMock(name='conn_second')
+        mock_factory.side_effect = [conn_first, conn_second]
+
+        mgr = self._make_manager(cache_ttl_seconds=300)
+
+        mock_time.return_value = 1000.0
+        result1 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        assert result1 is conn_first
+
+        # Advance past TTL
+        mock_time.return_value = 1301.0
+        result2 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        assert result2 is conn_second
+        assert result2 is not result1
+        assert mock_factory.call_count == 2
+
+    @patch('sapclimcp.config.time.monotonic')
+    @patch('sap.cli.adt_connection_from_args')
+    def test_ttl_not_expired_returns_cached(self, mock_factory, mock_time):
+        """Before TTL expires, the same cached connection is returned."""
+        mock_factory.return_value = MagicMock()
+
+        mgr = self._make_manager(cache_ttl_seconds=300)
+
+        mock_time.return_value = 1000.0
+        conn1 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+
+        # Advance but NOT past TTL
+        mock_time.return_value = 1299.0
+        conn2 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+
+        assert conn1 is conn2
+        assert mock_factory.call_count == 1
+
+    @patch('sap.cli.adt_connection_from_args')
+    def test_evict_removes_cached_connection(self, mock_factory):
+        """After evict(), the next get_connection creates a fresh connection."""
+        conn_first = MagicMock(name='conn_first')
+        conn_second = MagicMock(name='conn_second')
+        mock_factory.side_effect = [conn_first, conn_second]
+
+        mgr = self._make_manager()
+        result1 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        assert result1 is conn_first
+
+        mgr.evict('DEV', sap.cli.adt_connection_from_args)
+
+        result2 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        assert result2 is conn_second
+        assert mock_factory.call_count == 2
+
+    def test_evict_noop_for_uncached(self):
+        """Evicting a connection that was never cached does not raise."""
+        mgr = self._make_manager()
+        mgr.evict('DEV', sap.cli.adt_connection_from_args)
+
+    @patch('sap.cli.adt_connection_from_args')
+    def test_evict_none_system_uses_default(self, mock_factory):
+        """evict(None, factory) resolves to the default system."""
+        conn_first = MagicMock(name='conn_first')
+        conn_second = MagicMock(name='conn_second')
+        mock_factory.side_effect = [conn_first, conn_second]
+
+        mgr = self._make_manager()
+        mgr.get_connection(None, sap.cli.adt_connection_from_args)
+
+        mgr.evict(None, sap.cli.adt_connection_from_args)
+
+        result = mgr.get_connection(None, sap.cli.adt_connection_from_args)
+        assert result is conn_second
+        assert mock_factory.call_count == 2
+
+    @patch('sapclimcp.config.time.monotonic')
+    @patch('sap.cli.adt_connection_from_args')
+    def test_custom_ttl(self, mock_factory, mock_time):
+        """A short custom TTL triggers recreation sooner."""
+        conn_first = MagicMock(name='conn_first')
+        conn_second = MagicMock(name='conn_second')
+        mock_factory.side_effect = [conn_first, conn_second]
+
+        mgr = self._make_manager(cache_ttl_seconds=60)
+
+        mock_time.return_value = 0.0
+        mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+
+        mock_time.return_value = 60.0
+        result = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        assert result is conn_second
+
+    def test_evict_unsupported_factory_is_noop(self):
+        """Evicting with an unrecognized factory does not raise."""
+        mgr = self._make_manager()
+        mgr.evict('DEV', lambda args: None)
+
+
+# ---------------------------------------------------------------------------
 # SystemConfig validation
 # ---------------------------------------------------------------------------
 
