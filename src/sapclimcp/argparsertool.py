@@ -24,8 +24,8 @@ def _add_default_if_specified(spec, default):
     return spec
 
 
-def _builtin_to_spec(builtinTyp):
-    match builtinTyp:
+def _builtin_to_spec(builtin_type):
+    match builtin_type:
         case builtins.bool:
             return {'type': 'boolean'}
         case builtins.str:
@@ -33,7 +33,7 @@ def _builtin_to_spec(builtinTyp):
         case builtins.int:
             return {'type': 'integer'}
         case _:
-            raise ArgToToolConversionError('Unsupported type: ' + str(builtinTyp))
+            raise ArgToToolConversionError('Unsupported type: ' + str(builtin_type))
 
 
 def _argument_spec_to_json_spec(argparserArgument):
@@ -61,7 +61,7 @@ def _argument_spec_to_json_spec(argparserArgument):
 
 
 @dataclass
-class ArgPaserToolInputSchema:
+class ArgParserToolInputSchema:
     properties: dict[str, Any] = field(default_factory=dict)
     required: list[str] = field(default_factory=list)
 
@@ -79,7 +79,7 @@ class ArgParserTool:
        The root ArgParser instance has all the MCP definitions stored
        in the instance member tools.
 
-       The tools have the JSON input schema definition in the members:\
+       The tools have the JSON input schema definition in the members:
 
        To make this class working properly, you need to call set_defaults
        with "execute=<Callable[connection, SimpleNamespace]>". The value will
@@ -90,7 +90,7 @@ class ArgParserTool:
         self.name = name
         self.cmdfn = None
         self.conn_factory = conn_factory
-        self.input_schema = ArgPaserToolInputSchema()
+        self.input_schema = ArgParserToolInputSchema()
         self.tools = {}
         self._defaults: dict[str, Any] = {}
 
@@ -100,7 +100,7 @@ class ArgParserTool:
     def add_argument(self, *args, **kwargs):
         """Convert command line argument to MCP Tool input property"""
 
-        # Property name - use this one if it is a possitional argument (no --)
+        # Property name - use this one if it is a positional argument (no --)
         parameter = args[0]
 
         if parameter[0] == '-':

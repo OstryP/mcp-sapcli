@@ -11,7 +11,6 @@ from typing import (
     FrozenSet,
     Generic,
     NamedTuple,
-    Union,
 )
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -40,7 +39,7 @@ from sapclimcp.config import ConfigError
 _LOGGER = logging.getLogger(__name__)
 
 # Type aliases for SAP connections and commands
-SAPConnectionType = Union[adt.Connection]
+SAPConnectionType = adt.Connection
 CommandType = Callable[[SAPConnectionType, SimpleNamespace], None]
 
 # Connection parameters for MCP tools
@@ -122,7 +121,7 @@ class OperationResult(NamedTuple):
     Contents: str
 
 
-def _run_adt_command(args: SimpleNamespace, command: CommandType, connection: Any = None):
+def _run_adt_command(args: SimpleNamespace, command: CommandType, connection: Any = None) -> OperationResult:
     if connection is None:
         try:
             connection = sap.cli.adt_connection_from_args(args)
@@ -203,7 +202,7 @@ class SapcliCommandTool(Tool):
     server-side and the LLM never sees credential parameters.
     """
 
-    # WTF is this?
+    # Pydantic requires this for fields with non-serializable types (ArgParserTool)
     model_config = {'arbitrary_types_allowed': True}
 
     arg_tool: ArgParserTool
@@ -286,11 +285,9 @@ class SapcliCommandTool(Tool):
         except argparsertool.MissingArgument as ex:
             raise SapcliCommandToolError(str(ex))
 
-        # pylint: disable-next=comparison-with-callable
-        if self.arg_tool.conn_factory == sap.cli.adt_connection_from_args:
+        if self.arg_tool.conn_factory is sap.cli.adt_connection_from_args:
             result = self._run_adt(cmd_args, connection)
-        # pylint: disable-next=comparison-with-callable
-        elif self.arg_tool.conn_factory == sap.cli.gcts_connection_from_args:
+        elif self.arg_tool.conn_factory is sap.cli.gcts_connection_from_args:
             result = self._run_gcts(cmd_args, connection)
         else:
             raise SapcliCommandToolError(

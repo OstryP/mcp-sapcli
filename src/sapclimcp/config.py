@@ -322,9 +322,9 @@ class ConnectionManager:
         resolved_name = system_name or self._config.default_system
 
         # Determine connection type from factory
-        if conn_factory == sap.cli.adt_connection_from_args:
+        if conn_factory is sap.cli.adt_connection_from_args:
             conn_type = 'adt'
-        elif conn_factory == sap.cli.gcts_connection_from_args:
+        elif conn_factory is sap.cli.gcts_connection_from_args:
             conn_type = 'gcts'
         else:
             raise ConfigError(
