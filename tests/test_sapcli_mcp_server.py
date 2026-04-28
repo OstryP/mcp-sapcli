@@ -1,11 +1,12 @@
 """Unit tests for sapcli-mcp-server.py"""
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, call
 from types import SimpleNamespace
 from io import StringIO
 
 from sap.errors import SAPCliError
+from sap.http.errors import UnauthorizedError
 import sap.cli.core
 
 import pytest
@@ -524,3 +525,185 @@ class TestSapcliCommandToolWithConnectionManager:
         mock_manager.get_connection.assert_called_once_with(
             None, sap.cli.adt_connection_from_args
         )
+
+
+# ---------------------------------------------------------------------------
+# Helper for creating UnauthorizedError instances in tests
+# ---------------------------------------------------------------------------
+
+
+def _make_unauthorized_error(user='TESTUSER'):
+    mock_req = MagicMock(method='GET', url='http://sap.example.com/sap/bc/adt')
+    mock_res = MagicMock(status_code=401, text='Unauthorized')
+    return UnauthorizedError(mock_req, mock_res, user)
+
+
+# ---------------------------------------------------------------------------
+# Error propagation: UnauthorizedError re-raise
+# ---------------------------------------------------------------------------
+
+
+class TestUnauthorizedErrorPropagation:
+
+    def test_run_sapcli_command_reraises_unauthorized(self):
+        """UnauthorizedError propagates through _run_sapcli_command (not caught)."""
+        mock_conn = MagicMock()
+
+        def failing_command(conn, args):
+            raise _make_unauthorized_error()
+
+        with pytest.raises(UnauthorizedError):
+            mcptools._run_sapcli_command(failing_command, mock_conn, SimpleNamespace())
+
+    def test_run_adt_command_reraises_unauthorized(self):
+        """UnauthorizedError from connection creation propagates through _run_adt_command."""
+        with patch('sap.cli.adt_connection_from_args') as mock_factory:
+            mock_factory.side_effect = _make_unauthorized_error()
+
+            with pytest.raises(UnauthorizedError):
+                mcptools._run_adt_command(SimpleNamespace(), MagicMock(), connection=None)
+
+    def test_run_gcts_command_reraises_unauthorized(self):
+        """UnauthorizedError from connection creation propagates through _run_gcts_command."""
+        with patch('sap.cli.gcts_connection_from_args') as mock_factory:
+            mock_factory.side_effect = _make_unauthorized_error()
+
+            with pytest.raises(UnauthorizedError):
+                mcptools._run_gcts_command(SimpleNamespace(), MagicMock(), connection=None)
+
+    def test_non_auth_errors_still_caught_in_run_sapcli_command(self):
+        """Generic SAPCliError is still caught and converted to OperationResult."""
+        mock_conn = MagicMock()
+
+        def failing_command(conn, args):
+            raise SAPCliError("Some other error")
+
+        result = mcptools._run_sapcli_command(failing_command, mock_conn, SimpleNamespace())
+        assert result.Success is False
+        assert "Some other error" in result.LogMessages[0]
+
+
+# ---------------------------------------------------------------------------
+# Retry on auth failure in SapcliCommandTool.run()
+# ---------------------------------------------------------------------------
+
+
+class TestRetryOnAuthFailure:
+
+    @staticmethod
+    def _make_tool_with_manager(tool_fn, mock_manager):
+        """Helper: create SapcliCommandTool wired to mock_manager."""
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args)
+        tool = apt.add_parser('read')
+        tool.add_argument('name')
+        tool.set_defaults(execute=tool_fn)
+
+        cmd_tool = apt.tools['tester_read']
+        return mcptools.SapcliCommandTool.from_argparser_tool(
+            cmd_tool, connection_manager=mock_manager,
+        )
+
+    @pytest.mark.asyncio
+    async def test_retry_on_unauthorized_succeeds(self):
+        """First call raises 401, retry with fresh connection succeeds."""
+        conn_stale = MagicMock(name='conn_stale')
+        conn_fresh = MagicMock(name='conn_fresh')
+
+        mock_manager = MagicMock()
+        mock_manager.get_connection.side_effect = [conn_stale, conn_fresh]
+
+        call_count = [0]
+
+        def tool_fn(conn, args):
+            call_count[0] += 1
+            if conn is conn_stale:
+                raise _make_unauthorized_error()
+            console = args.console_factory()
+            console.printout("success")
+
+        sct = self._make_tool_with_manager(tool_fn, mock_manager)
+        result = await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+
+        success, log_messages, contents = result.structured_content['result']
+        assert success is True
+        assert contents == "success\n"
+        assert call_count[0] == 2
+        mock_manager.evict.assert_called_once_with('DEV', sap.cli.adt_connection_from_args)
+        assert mock_manager.get_connection.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_retry_on_unauthorized_fails_twice(self):
+        """Both attempts raise 401 — error reported to caller."""
+        mock_manager = MagicMock()
+        mock_manager.get_connection.return_value = MagicMock()
+
+        def tool_fn(conn, args):
+            raise _make_unauthorized_error()
+
+        sct = self._make_tool_with_manager(tool_fn, mock_manager)
+
+        with pytest.raises(mcptools.SapcliCommandToolError, match='after retry'):
+            await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+
+        mock_manager.evict.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('sap.cli.adt_connection_from_args')
+    async def test_no_retry_without_connection_manager(self, mock_adt_factory):
+        """Without connection_manager, 401 is immediately reported as tool error."""
+        mock_adt_factory.return_value = MagicMock()
+
+        def tool_fn(conn, args):
+            raise _make_unauthorized_error()
+
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args)
+        tool = apt.add_parser('read')
+        tool.add_argument('name')
+        tool.set_defaults(execute=tool_fn)
+
+        cmd_tool = apt.tools['tester_read']
+        sct = mcptools.SapcliCommandTool.from_argparser_tool(cmd_tool)
+
+        with pytest.raises(mcptools.SapcliCommandToolError, match='401'):
+            await sct.run({
+                'ashost': 'test', 'client': '100',
+                'user': 'u', 'password': 'p',
+                'port': 443, 'ssl': True, 'verify': False,
+                'name': 'TEST_OBJ',
+            })
+
+    @pytest.mark.asyncio
+    async def test_non_auth_errors_not_retried(self):
+        """Generic SAPCliError still produces OperationResult(Success=False), no evict."""
+        mock_manager = MagicMock()
+        mock_manager.get_connection.return_value = MagicMock()
+
+        def tool_fn(conn, args):
+            raise SAPCliError("Not found")
+
+        sct = self._make_tool_with_manager(tool_fn, mock_manager)
+        result = await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+
+        assert result.structured_content['result'][0] is False
+        mock_manager.evict.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_retry_uses_fresh_connection(self):
+        """The retry attempt must use a different connection object."""
+        connections_used = []
+
+        conn_stale = MagicMock(name='conn_stale')
+        conn_fresh = MagicMock(name='conn_fresh')
+
+        mock_manager = MagicMock()
+        mock_manager.get_connection.side_effect = [conn_stale, conn_fresh]
+
+        def tool_fn(conn, args):
+            connections_used.append(conn)
+            if conn is conn_stale:
+                raise _make_unauthorized_error()
+
+        sct = self._make_tool_with_manager(tool_fn, mock_manager)
+        await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+
+        assert connections_used == [conn_stale, conn_fresh]

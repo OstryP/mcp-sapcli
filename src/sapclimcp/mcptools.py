@@ -22,6 +22,7 @@ from sap import (
     adt,
     errors,
 )
+from sap.http.errors import UnauthorizedError
 
 import sap.cli
 import sap.cli.core
@@ -125,6 +126,8 @@ def _run_adt_command(args: SimpleNamespace, command: CommandType, connection: An
     if connection is None:
         try:
             connection = sap.cli.adt_connection_from_args(args)
+        except UnauthorizedError:
+            raise
         except errors.SAPCliError as ex:
             return OperationResult(
                     Success=False,
@@ -143,6 +146,8 @@ def _run_gcts_command(
     if connection is None:
         try:
             connection = sap.cli.gcts_connection_from_args(args)
+        except UnauthorizedError:
+            raise
         except errors.SAPCliError as ex:
             return OperationResult(
                     Success=False,
@@ -163,6 +168,8 @@ def _run_sapcli_command(command: CommandType, conn: SAPConnectionType, args: Sim
 
     try:
         command(conn, args)
+    except UnauthorizedError:
+        raise
     except errors.SAPCliError as ex:
         return OperationResult(
                 Success=False,
@@ -246,8 +253,29 @@ class SapcliCommandTool(Tool):
         """
         return _run_gcts_command(cmd_args, self.arg_tool.cmdfn, connection)
 
+    def _execute_command(
+            self,
+            cmd_args: SimpleNamespace,
+            connection: Any = None,
+    ) -> OperationResult:
+        """Dispatch to the appropriate connection-type runner."""
+
+        if self.arg_tool.conn_factory is sap.cli.adt_connection_from_args:
+            return self._run_adt(cmd_args, connection)
+        if self.arg_tool.conn_factory is sap.cli.gcts_connection_from_args:
+            return self._run_gcts(cmd_args, connection)
+
+        raise SapcliCommandToolError(
+            f"Tool '{self.name}' uses unsupported connection type. "
+            "Only ADT and gCTS connections are currently supported."
+        )
+
     async def run(self, arguments: dict[str, Any]) -> ToolResult:
         """Run the sapcli command with the given arguments.
+
+        When a ``connection_manager`` is set and the command fails with
+        an ``UnauthorizedError`` (HTTP 401), the stale connection is
+        evicted and the command is retried once with a fresh connection.
 
         Args:
             arguments: Dictionary containing command arguments
@@ -285,15 +313,34 @@ class SapcliCommandTool(Tool):
         except argparsertool.MissingArgument as ex:
             raise SapcliCommandToolError(str(ex))
 
-        if self.arg_tool.conn_factory is sap.cli.adt_connection_from_args:
-            result = self._run_adt(cmd_args, connection)
-        elif self.arg_tool.conn_factory is sap.cli.gcts_connection_from_args:
-            result = self._run_gcts(cmd_args, connection)
-        else:
-            raise SapcliCommandToolError(
-                f"Tool '{self.name}' uses unsupported connection type. "
-                "Only ADT and gCTS connections are currently supported."
+        try:
+            result = self._execute_command(cmd_args, connection)
+        except UnauthorizedError:
+            if self.connection_manager is None:
+                raise SapcliCommandToolError(
+                    "Authentication failed (HTTP 401). "
+                    "Check your credentials."
+                )
+
+            _LOGGER.info(
+                "Auth failure for system '%s', evicting connection and retrying",
+                system,
             )
+            self.connection_manager.evict(system, self.arg_tool.conn_factory)
+
+            try:
+                connection = self.connection_manager.get_connection(
+                    system, self.arg_tool.conn_factory
+                )
+            except ConfigError as ex:
+                raise SapcliCommandToolError(str(ex))
+
+            try:
+                result = self._execute_command(cmd_args, connection)
+            except UnauthorizedError as ex:
+                raise SapcliCommandToolError(
+                    f"Authentication failed after retry (HTTP 401): {ex}"
+                )
 
         # OperationResult is a NamedTuple which serializes as an array [bool, list[str], str]
         return ToolResult(
