@@ -293,10 +293,9 @@ class SapcliCommandTool(Tool):
                 f"Tool '{self.name}' has no command function (cmdfn is None)"
             )
 
-        # Extract system before parse_args (not a sapcli argument)
-        system = arguments.get('system')
-        if 'system' in arguments:
-            del arguments['system']
+        # Work on a copy to avoid mutating the caller's dict
+        arguments = dict(arguments)
+        system = arguments.pop('system', None)
 
         # Resolve connection from manager if available
         connection = None
@@ -313,6 +312,8 @@ class SapcliCommandTool(Tool):
         except argparsertool.MissingArgument as ex:
             raise SapcliCommandToolError(str(ex))
 
+        # Retry is safe: UnauthorizedError fires during session/CSRF
+        # establishment, before the command body executes any writes.
         try:
             result = self._execute_command(cmd_args, connection)
         except UnauthorizedError:

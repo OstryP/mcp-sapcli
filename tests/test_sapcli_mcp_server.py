@@ -1,7 +1,7 @@
 """Unit tests for sapcli-mcp-server.py"""
 
 import os
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 from types import SimpleNamespace
 from io import StringIO
 
@@ -707,3 +707,58 @@ class TestRetryOnAuthFailure:
         await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
 
         assert connections_used == [conn_stale, conn_fresh]
+
+    @pytest.mark.asyncio
+    async def test_retry_get_connection_failure_maps_to_tool_error(self):
+        """If get_connection raises on retry, it becomes SapcliCommandToolError."""
+        from sapclimcp.config import ConfigError
+
+        mock_manager = MagicMock()
+        mock_manager.get_connection.side_effect = [
+            MagicMock(name='conn_stale'),
+            ConfigError("System vanished"),
+        ]
+
+        def tool_fn(conn, args):
+            raise _make_unauthorized_error()
+
+        sct = self._make_tool_with_manager(tool_fn, mock_manager)
+
+        with pytest.raises(mcptools.SapcliCommandToolError, match='System vanished'):
+            await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+
+    @pytest.mark.asyncio
+    async def test_retry_on_unauthorized_gcts(self):
+        """Retry works through the gCTS execution path."""
+        conn_stale = MagicMock(name='conn_stale')
+        conn_fresh = MagicMock(name='conn_fresh')
+
+        mock_manager = MagicMock()
+        mock_manager.get_connection.side_effect = [conn_stale, conn_fresh]
+
+        call_count = [0]
+
+        def tool_fn(conn, args):
+            call_count[0] += 1
+            if conn is conn_stale:
+                raise _make_unauthorized_error()
+            console = args.console_factory()
+            console.printout("gcts ok")
+
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.gcts_connection_from_args)
+        tool = apt.add_parser('repolist')
+        tool.add_argument('name')
+        tool.set_defaults(execute=tool_fn)
+
+        cmd_tool = apt.tools['tester_repolist']
+        sct = mcptools.SapcliCommandTool.from_argparser_tool(
+            cmd_tool, connection_manager=mock_manager,
+        )
+
+        result = await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+
+        success, log_messages, contents = result.structured_content['result']
+        assert success is True
+        assert contents == "gcts ok\n"
+        assert call_count[0] == 2
+        mock_manager.evict.assert_called_once_with('DEV', sap.cli.gcts_connection_from_args)
