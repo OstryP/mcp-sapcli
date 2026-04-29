@@ -7,6 +7,7 @@ and manages cached connections per system.
 """
 
 import json
+import logging
 import os
 import re
 import time
@@ -19,6 +20,8 @@ import requests
 import sap.adt
 import sap.cli
 
+
+_LOGGER = logging.getLogger(__name__)
 
 _ENV_VAR_RE = re.compile(r'^\$([A-Za-z_][A-Za-z0-9_]*)$')
 
@@ -158,7 +161,7 @@ def load_config(path: str) -> ServerConfig:
 DEFAULT_CACHE_TTL = 3600
 
 
-@dataclass
+@dataclass(slots=True)
 class _CacheEntry:
     """A cached connection with its creation timestamp."""
 
@@ -174,8 +177,10 @@ class ConnectionManager:
 
     Cached connections expire after ``cache_ttl_seconds`` (default 1 hour).
     When a TTL-expired entry is requested, it is discarded and a fresh
-    connection is created transparently.  The ``evict()`` method allows
-    callers to force immediate removal (e.g. after an auth failure).
+    connection is created transparently.  Set ``cache_ttl_seconds=0`` to
+    disable caching (every call creates a fresh connection).  The
+    ``evict()`` method allows callers to force immediate removal
+    (e.g. after an auth failure).
 
     Note: the cache is not thread-safe. In stdio mode this is moot
     (single-threaded). In HTTP mode, concurrent requests for the same
@@ -349,6 +354,10 @@ class ConnectionManager:
 
         resolved_name = system_name or self._config.default_system
         if resolved_name is None:
+            return
+
+        if resolved_name not in self._config.systems:
+            _LOGGER.debug("evict: system '%s' not in config, skipping", resolved_name)
             return
 
         try:

@@ -2,7 +2,7 @@ import builtins
 
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Any, FrozenSet, Set, Union
+from typing import Any
 
 
 class ArgToToolConversionError(Exception):
@@ -203,7 +203,7 @@ class ArgParserTool:
     def parse_args(
             self,
             arguments: dict[str, Any],
-            exclude_params: Union[Set[str], FrozenSet[str], None] = None
+            exclude_params: set[str] | frozenset[str] | None = None
     ) -> SimpleNamespace:
         """Prepare command arguments with defaults for missing optional parameters.
 

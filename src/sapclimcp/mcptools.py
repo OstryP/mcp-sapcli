@@ -40,8 +40,7 @@ from sapclimcp.config import ConfigError
 _LOGGER = logging.getLogger(__name__)
 
 # Type aliases for SAP connections and commands
-SAPConnectionType = adt.Connection
-CommandType = Callable[[SAPConnectionType, SimpleNamespace], None]
+CommandType = Callable[[adt.Connection, SimpleNamespace], None]
 
 # Connection parameters for MCP tools
 # Common parameters required for all connection types
@@ -126,7 +125,7 @@ def _run_adt_command(args: SimpleNamespace, command: CommandType, connection: An
     if connection is None:
         try:
             connection = sap.cli.adt_connection_from_args(args)
-        except UnauthorizedError:
+        except UnauthorizedError:  # subclass of SAPCliError — must precede it
             raise
         except errors.SAPCliError as ex:
             return OperationResult(
@@ -146,7 +145,7 @@ def _run_gcts_command(
     if connection is None:
         try:
             connection = sap.cli.gcts_connection_from_args(args)
-        except UnauthorizedError:
+        except UnauthorizedError:  # subclass of SAPCliError — must precede it
             raise
         except errors.SAPCliError as ex:
             return OperationResult(
@@ -158,7 +157,7 @@ def _run_gcts_command(
     return _run_sapcli_command(command, connection, args)
 
 
-def _run_sapcli_command(command: CommandType, conn: SAPConnectionType, args: SimpleNamespace) -> OperationResult:
+def _run_sapcli_command(command: CommandType, conn: adt.Connection, args: SimpleNamespace) -> OperationResult:
 
     output_buffer = OutputBuffer()
 
@@ -168,7 +167,7 @@ def _run_sapcli_command(command: CommandType, conn: SAPConnectionType, args: Sim
 
     try:
         command(conn, args)
-    except UnauthorizedError:
+    except UnauthorizedError:  # subclass of SAPCliError — must precede it
         raise
     except errors.SAPCliError as ex:
         return OperationResult(
@@ -313,7 +312,8 @@ class SapcliCommandTool(Tool):
             raise SapcliCommandToolError(str(ex))
 
         # Retry is safe: UnauthorizedError fires during session/CSRF
-        # establishment, before the command body executes any writes.
+        # establishment (sap.http.client.HTTPClient.build_session), before
+        # the command body executes any writes.
         try:
             result = self._execute_command(cmd_args, connection)
         except UnauthorizedError:
