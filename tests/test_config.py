@@ -237,7 +237,7 @@ class TestConnectionManager:
         mock_factory.return_value = mock_conn
 
         mgr = self._make_manager()
-        conn = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        conn = mgr.get_connection('DEV', 'adt')
 
         assert conn is mock_conn
         mock_factory.assert_called_once()
@@ -252,8 +252,8 @@ class TestConnectionManager:
         mock_factory.return_value = MagicMock()
 
         mgr = self._make_manager()
-        conn1 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
-        conn2 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        conn1 = mgr.get_connection('DEV', 'adt')
+        conn2 = mgr.get_connection('DEV', 'adt')
 
         assert conn1 is conn2
         assert mock_factory.call_count == 1  # Only created once
@@ -263,7 +263,7 @@ class TestConnectionManager:
         mock_factory.return_value = MagicMock()
 
         mgr = self._make_manager()
-        conn = mgr.get_connection(None, sap.cli.adt_connection_from_args)
+        conn = mgr.get_connection(None, 'adt')
 
         assert conn is not None
         mock_factory.assert_called_once()
@@ -271,7 +271,7 @@ class TestConnectionManager:
     def test_unknown_system_raises(self):
         mgr = self._make_manager()
         with pytest.raises(ConfigError, match='Unknown system'):
-            mgr.get_connection('NONEXISTENT', sap.cli.adt_connection_from_args)
+            mgr.get_connection('NONEXISTENT', 'adt')
 
     def test_no_default_no_system_raises(self):
         cfg = ServerConfig(
@@ -282,7 +282,7 @@ class TestConnectionManager:
         )
         mgr = ConnectionManager(cfg)
         with pytest.raises(ConfigError, match='No system specified'):
-            mgr.get_connection(None, sap.cli.adt_connection_from_args)
+            mgr.get_connection(None, 'adt')
 
     @patch('sap.cli.adt_connection_from_args')
     def test_cookie_auth_patches_build_session(self, mock_factory):
@@ -301,7 +301,7 @@ class TestConnectionManager:
         mock_factory.return_value = mock_conn
 
         mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
-        mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        mgr.get_connection('DEV', 'adt')
 
         # build_session was replaced with our cookie version
         assert mock_http_client.build_session is not original_build_session
@@ -319,19 +319,19 @@ class TestConnectionManager:
         mock_factory.return_value = mock_conn
 
         mgr = self._make_manager()
-        conn = mgr.get_connection('DEV', sap.cli.gcts_connection_from_args)
+        conn = mgr.get_connection('DEV', 'gcts')
 
         assert conn is mock_conn
 
-    def test_unsupported_factory_raises(self):
+    def test_unsupported_conn_type_raises(self):
         mgr = self._make_manager()
-        with pytest.raises(ConfigError, match='Unsupported connection factory'):
-            mgr.get_connection('DEV', lambda args: None)
+        with pytest.raises(ConfigError, match='Unsupported connection type'):
+            mgr.get_connection('DEV', 'odata')
 
     def test_gcts_cookie_auth_raises(self):
         mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
         with pytest.raises(ConfigError, match='not supported for gCTS'):
-            mgr.get_connection('DEV', sap.cli.gcts_connection_from_args)
+            mgr.get_connection('DEV', 'gcts')
 
     @patch('sap.cli.adt_connection_from_args')
     def test_hasattr_guard_on_http_client(self, mock_factory):
@@ -341,7 +341,7 @@ class TestConnectionManager:
 
         mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
         with pytest.raises(ConfigError, match='_http_client'):
-            mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+            mgr.get_connection('DEV', 'adt')
 
 
 # ---------------------------------------------------------------------------
@@ -375,12 +375,12 @@ class TestConnectionManagerTTL:
         mgr = self._make_manager(cache_ttl_seconds=300)
 
         mock_time.return_value = 1000.0
-        result1 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        result1 = mgr.get_connection('DEV', 'adt')
         assert result1 is conn_first
 
         # Advance past TTL
         mock_time.return_value = 1301.0
-        result2 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        result2 = mgr.get_connection('DEV', 'adt')
         assert result2 is conn_second
         assert result2 is not result1
         assert mock_factory.call_count == 2
@@ -394,11 +394,11 @@ class TestConnectionManagerTTL:
         mgr = self._make_manager(cache_ttl_seconds=300)
 
         mock_time.return_value = 1000.0
-        conn1 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        conn1 = mgr.get_connection('DEV', 'adt')
 
         # Advance but NOT past TTL
         mock_time.return_value = 1299.0
-        conn2 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        conn2 = mgr.get_connection('DEV', 'adt')
 
         assert conn1 is conn2
         assert mock_factory.call_count == 1
@@ -411,19 +411,19 @@ class TestConnectionManagerTTL:
         mock_factory.side_effect = [conn_first, conn_second]
 
         mgr = self._make_manager()
-        result1 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        result1 = mgr.get_connection('DEV', 'adt')
         assert result1 is conn_first
 
-        mgr.evict('DEV', sap.cli.adt_connection_from_args)
+        mgr.evict('DEV', 'adt')
 
-        result2 = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        result2 = mgr.get_connection('DEV', 'adt')
         assert result2 is conn_second
         assert mock_factory.call_count == 2
 
     def test_evict_noop_for_uncached(self):
         """Evicting a connection that was never cached does not raise."""
         mgr = self._make_manager()
-        mgr.evict('DEV', sap.cli.adt_connection_from_args)
+        mgr.evict('DEV', 'adt')
 
     @patch('sap.cli.adt_connection_from_args')
     def test_evict_none_system_uses_default(self, mock_factory):
@@ -433,11 +433,11 @@ class TestConnectionManagerTTL:
         mock_factory.side_effect = [conn_first, conn_second]
 
         mgr = self._make_manager()
-        mgr.get_connection(None, sap.cli.adt_connection_from_args)
+        mgr.get_connection(None, 'adt')
 
-        mgr.evict(None, sap.cli.adt_connection_from_args)
+        mgr.evict(None, 'adt')
 
-        result = mgr.get_connection(None, sap.cli.adt_connection_from_args)
+        result = mgr.get_connection(None, 'adt')
         assert result is conn_second
         assert mock_factory.call_count == 2
 
@@ -452,16 +452,16 @@ class TestConnectionManagerTTL:
         mgr = self._make_manager(cache_ttl_seconds=60)
 
         mock_time.return_value = 0.0
-        mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        mgr.get_connection('DEV', 'adt')
 
         mock_time.return_value = 60.0
-        result = mgr.get_connection('DEV', sap.cli.adt_connection_from_args)
+        result = mgr.get_connection('DEV', 'adt')
         assert result is conn_second
 
-    def test_evict_unsupported_factory_is_noop(self):
-        """Evicting with an unrecognized factory does not raise."""
+    def test_evict_unsupported_conn_type_is_noop(self):
+        """Evicting with an unrecognized conn_type does not raise."""
         mgr = self._make_manager()
-        mgr.evict('DEV', lambda args: None)
+        mgr.evict('DEV', 'odata')
 
     def test_evict_none_system_no_default_is_noop(self):
         """evict(None, factory) is a no-op when no default_system is configured."""
@@ -476,7 +476,7 @@ class TestConnectionManagerTTL:
         cfg = ServerConfig(systems={'A': sys_a, 'B': sys_b})
         assert cfg.default_system is None
         mgr = ConnectionManager(cfg)
-        mgr.evict(None, sap.cli.adt_connection_from_args)
+        mgr.evict(None, 'adt')
 
 
 # ---------------------------------------------------------------------------

@@ -196,7 +196,7 @@ class TestSapcliCommandTool:
             assert hasattr(args, 'logical')
             assert args.logical is False
 
-        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args, conn_type='adt')
         tester_tool_cmd = apt.add_parser('tool')
         tester_tool_cmd.add_argument('--logical', action='store_true', default=False)
         tester_tool_cmd.set_defaults(execute=tester_tool_fn)
@@ -234,7 +234,7 @@ class TestSapcliCommandTool:
             assert hasattr(args, 'dnul')
             assert args.dnul is None
 
-        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args, conn_type='adt')
         tester_tool_cmd = apt.add_parser('tool')
         tester_tool_cmd.add_argument('--dnul', nargs='?')
         tester_tool_cmd.set_defaults(execute=tester_tool_fn)
@@ -265,7 +265,7 @@ class TestSapcliCommandTool:
         def tester_tool_fn(conn, args):
             pass
 
-        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args, conn_type='adt')
         tester_tool_cmd = apt.add_parser('tool')
         tester_tool_cmd.add_argument('--ultrastrangeunique')  # required, no default
         tester_tool_cmd.set_defaults(execute=tester_tool_fn)
@@ -301,7 +301,7 @@ class TestSapcliCommandTool:
             assert hasattr(args, 'name_with_dash')
             assert args.name_with_dash == 'test_value'
 
-        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args, conn_type='adt')
         tester_tool_cmd = apt.add_parser('tool')
         tester_tool_cmd.add_argument('--name-with-dash')
         tester_tool_cmd.set_defaults(execute=tester_tool_fn)
@@ -341,7 +341,7 @@ class TestSapcliCommandToolWithPatches:
             with open(path, 'r', encoding='utf-8') as fobj:
                 assert fobj.read() == source_content
 
-        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args, conn_type='adt')
         tester_tool_cmd = apt.add_parser('write')
         tester_tool_cmd.add_argument('name')
         tester_tool_cmd.add_argument('source', nargs='+')
@@ -386,7 +386,7 @@ class TestSapcliCommandToolWithPatches:
             captured_source_path.append(args.source[0])
             raise SAPCliError("Write failed")
 
-        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=mock_adt_connection_from_args, conn_type='adt')
         tester_tool_cmd = apt.add_parser('write')
         tester_tool_cmd.add_argument('name')
         tester_tool_cmd.add_argument('source', nargs='+')
@@ -432,7 +432,7 @@ class TestSapcliCommandToolWithConnectionManager:
         def tool_fn(conn, args):
             received_conns.append(conn)
 
-        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args, conn_type='adt')
         tool = apt.add_parser('read')
         tool.add_argument('name')
         tool.set_defaults(execute=tool_fn)
@@ -445,7 +445,7 @@ class TestSapcliCommandToolWithConnectionManager:
         await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
 
         mock_manager.get_connection.assert_called_once_with(
-            'DEV', sap.cli.adt_connection_from_args
+            'DEV', 'adt'
         )
         assert received_conns == [mock_conn]
         # adt_connection_from_args should NOT be called — manager provides connection
@@ -463,7 +463,7 @@ class TestSapcliCommandToolWithConnectionManager:
         def tool_fn(conn, args):
             received_args.append(args)
 
-        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args, conn_type='adt')
         tool = apt.add_parser('read')
         tool.add_argument('name')
         tool.set_defaults(execute=tool_fn)
@@ -487,7 +487,7 @@ class TestSapcliCommandToolWithConnectionManager:
         mock_manager = MagicMock()
         mock_manager.get_connection.side_effect = ConfigError("Unknown system 'BAD'")
 
-        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args, conn_type='adt')
         tool = apt.add_parser('read')
         tool.add_argument('name')
         tool.set_defaults(execute=MagicMock())
@@ -510,7 +510,7 @@ class TestSapcliCommandToolWithConnectionManager:
         def tool_fn(conn, args):
             pass
 
-        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args, conn_type='adt')
         tool = apt.add_parser('read')
         tool.add_argument('name')
         tool.set_defaults(execute=tool_fn)
@@ -523,7 +523,7 @@ class TestSapcliCommandToolWithConnectionManager:
         await sct.run({'name': 'TEST_OBJ'})
 
         mock_manager.get_connection.assert_called_once_with(
-            None, sap.cli.adt_connection_from_args
+            None, 'adt'
         )
 
 
@@ -593,7 +593,7 @@ class TestRetryOnAuthFailure:
     @staticmethod
     def _make_tool_with_manager(tool_fn, mock_manager):
         """Helper: create SapcliCommandTool wired to mock_manager."""
-        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args, conn_type='adt')
         tool = apt.add_parser('read')
         tool.add_argument('name')
         tool.set_defaults(execute=tool_fn)
@@ -628,7 +628,7 @@ class TestRetryOnAuthFailure:
         assert success is True
         assert contents == "success\n"
         assert call_count[0] == 2
-        mock_manager.evict.assert_called_once_with('DEV', sap.cli.adt_connection_from_args)
+        mock_manager.evict.assert_called_once_with('DEV', 'adt')
         assert mock_manager.get_connection.call_count == 2
 
     @pytest.mark.asyncio
@@ -656,7 +656,7 @@ class TestRetryOnAuthFailure:
         def tool_fn(conn, args):
             raise _make_unauthorized_error()
 
-        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args, conn_type='adt')
         tool = apt.add_parser('read')
         tool.add_argument('name')
         tool.set_defaults(execute=tool_fn)
@@ -745,7 +745,7 @@ class TestRetryOnAuthFailure:
             console = args.console_factory()
             console.printout("gcts ok")
 
-        apt = ArgParserTool('tester', None, conn_factory=sap.cli.gcts_connection_from_args)
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.gcts_connection_from_args, conn_type='gcts')
         tool = apt.add_parser('repolist')
         tool.add_argument('name')
         tool.set_defaults(execute=tool_fn)
@@ -761,4 +761,4 @@ class TestRetryOnAuthFailure:
         assert success is True
         assert contents == "gcts ok\n"
         assert call_count[0] == 2
-        mock_manager.evict.assert_called_once_with('DEV', sap.cli.gcts_connection_from_args)
+        mock_manager.evict.assert_called_once_with('DEV', 'gcts')
