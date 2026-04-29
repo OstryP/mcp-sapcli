@@ -24,7 +24,7 @@ def main():
     server = os.path.join(HERE, 'src', 'sapcli-mcp-server.py')
     config = os.path.join(HERE, 'sapcli-mcp.json')
     sys.exit(subprocess.call(
-        [sys.executable, server, '--stdio', '--config', config],
+        [sys.executable, server, '--stdio', '--config', config, '--experimental'],
         env=env,
         stderr=subprocess.DEVNULL,
     ))
