@@ -204,42 +204,42 @@ class TestConnectionManager:
         mgr = self._make_manager()
         assert mgr.default_system == 'DEV'
 
-    @patch('sap.cli.adt_connection_from_args')
-    def test_get_adt_connection(self, mock_factory):
+    @patch('sap.adt.Connection')
+    def test_get_adt_connection(self, mock_conn_cls):
         mock_conn = MagicMock()
-        mock_factory.return_value = mock_conn
+        mock_conn_cls.return_value = mock_conn
 
         mgr = self._make_manager()
         conn = mgr.get_connection('DEV', 'adt')
 
         assert conn is mock_conn
-        mock_factory.assert_called_once()
+        mock_conn_cls.assert_called_once()
 
         # Verify connection args
-        call_args = mock_factory.call_args[0][0]
-        assert call_args.ashost == 'test.example.com'
-        assert call_args.client == '100'
+        kwargs = mock_conn_cls.call_args.kwargs
+        assert kwargs['host'] == 'test.example.com'
+        assert kwargs['client'] == '100'
 
-    @patch('sap.cli.adt_connection_from_args')
-    def test_connection_caching(self, mock_factory):
-        mock_factory.return_value = MagicMock()
+    @patch('sap.adt.Connection')
+    def test_connection_caching(self, mock_conn_cls):
+        mock_conn_cls.return_value = MagicMock()
 
         mgr = self._make_manager()
         conn1 = mgr.get_connection('DEV', 'adt')
         conn2 = mgr.get_connection('DEV', 'adt')
 
         assert conn1 is conn2
-        assert mock_factory.call_count == 1  # Only created once
+        assert mock_conn_cls.call_count == 1  # Only created once
 
-    @patch('sap.cli.adt_connection_from_args')
-    def test_default_system_resolution(self, mock_factory):
-        mock_factory.return_value = MagicMock()
+    @patch('sap.adt.Connection')
+    def test_default_system_resolution(self, mock_conn_cls):
+        mock_conn_cls.return_value = MagicMock()
 
         mgr = self._make_manager()
         conn = mgr.get_connection(None, 'adt')
 
         assert conn is not None
-        mock_factory.assert_called_once()
+        mock_conn_cls.assert_called_once()
 
     def test_unknown_system_raises(self):
         mgr = self._make_manager()
@@ -257,34 +257,39 @@ class TestConnectionManager:
         with pytest.raises(ConfigError, match='No system specified'):
             mgr.get_connection(None, 'adt')
 
-    @patch('sap.cli.adt_connection_from_args')
-    def test_cookie_auth_patches_build_session(self, mock_factory):
-        """Cookie auth replaces build_session and injects cookie header."""
-        mock_conn = MagicMock()
-        mock_http_client = MagicMock()
-        mock_http_client.ssl_server_cert = None
-        mock_http_client.ssl_verify = False
-
-        mock_response = MagicMock()
-        mock_response.headers = {'x-csrf-token': 'test-csrf-token'}
-        mock_http_client.execute_with_session.return_value = mock_response
-
-        mock_conn._http_client = mock_http_client
-        original_build_session = mock_http_client.build_session
-        mock_factory.return_value = mock_conn
+    @patch('sap.adt.Connection')
+    def test_cookie_auth_uses_session_initializer(self, mock_conn_cls):
+        """Cookie auth passes CookieSessionInitializer to sap.adt.Connection."""
+        mock_conn_cls.return_value = MagicMock()
 
         mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
         mgr.get_connection('DEV', 'adt')
 
-        # build_session was replaced with our cookie version
-        assert mock_http_client.build_session is not original_build_session
-        assert callable(mock_http_client.build_session)
+        mock_conn_cls.assert_called_once()
+        kwargs = mock_conn_cls.call_args.kwargs
+        initializer = kwargs['session_initializer']
 
-        # Call the patched build_session and verify behavior
-        session, response = mock_http_client.build_session()
-        assert session.auth is None
-        assert session.headers['Cookie'] == 'SAP_SESSION=abc'
-        assert session.headers['x-csrf-token'] == 'test-csrf-token'
+        from sapclimcp.config import CookieSessionInitializer
+        assert isinstance(initializer, CookieSessionInitializer)
+
+        # Verify initialize_session sets cookie and removes basic auth
+        import requests as req
+        session = req.Session()
+        result = initializer.initialize_session(session)
+        assert result.auth is None
+        assert result.headers['Cookie'] == 'SAP_SESSION=abc'
+
+    @patch('sap.adt.Connection')
+    def test_basic_auth_no_session_initializer(self, mock_conn_cls):
+        """Basic auth passes session_initializer=None to sap.adt.Connection."""
+        mock_conn_cls.return_value = MagicMock()
+
+        mgr = self._make_manager()
+        mgr.get_connection('DEV', 'adt')
+
+        mock_conn_cls.assert_called_once()
+        kwargs = mock_conn_cls.call_args.kwargs
+        assert kwargs['session_initializer'] is None
 
     @patch('sap.cli.gcts_connection_from_args')
     def test_get_gcts_connection(self, mock_factory):
@@ -305,16 +310,6 @@ class TestConnectionManager:
         mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
         with pytest.raises(ConfigError, match='not supported for gCTS'):
             mgr.get_connection('DEV', 'gcts')
-
-    @patch('sap.cli.adt_connection_from_args')
-    def test_hasattr_guard_on_http_client(self, mock_factory):
-        """ConfigError raised when connection lacks _http_client."""
-        mock_conn = MagicMock(spec=[])  # empty spec — no _http_client
-        mock_factory.return_value = mock_conn
-
-        mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
-        with pytest.raises(ConfigError, match='_http_client'):
-            mgr.get_connection('DEV', 'adt')
 
 
 # ---------------------------------------------------------------------------
@@ -338,12 +333,12 @@ class TestConnectionManagerTTL:
         return ConnectionManager(cfg, cache_ttl_seconds=cache_ttl_seconds)
 
     @patch('sapclimcp.config.time.monotonic')
-    @patch('sap.cli.adt_connection_from_args')
-    def test_ttl_expired_connection_recreated(self, mock_factory, mock_time):
+    @patch('sap.adt.Connection')
+    def test_ttl_expired_connection_recreated(self, mock_conn_cls, mock_time):
         """After TTL expires, get_connection must create a new connection."""
         conn_first = MagicMock(name='conn_first')
         conn_second = MagicMock(name='conn_second')
-        mock_factory.side_effect = [conn_first, conn_second]
+        mock_conn_cls.side_effect = [conn_first, conn_second]
 
         mgr = self._make_manager(cache_ttl_seconds=300)
 
@@ -356,13 +351,13 @@ class TestConnectionManagerTTL:
         result2 = mgr.get_connection('DEV', 'adt')
         assert result2 is conn_second
         assert result2 is not result1
-        assert mock_factory.call_count == 2
+        assert mock_conn_cls.call_count == 2
 
     @patch('sapclimcp.config.time.monotonic')
-    @patch('sap.cli.adt_connection_from_args')
-    def test_ttl_not_expired_returns_cached(self, mock_factory, mock_time):
+    @patch('sap.adt.Connection')
+    def test_ttl_not_expired_returns_cached(self, mock_conn_cls, mock_time):
         """Before TTL expires, the same cached connection is returned."""
-        mock_factory.return_value = MagicMock()
+        mock_conn_cls.return_value = MagicMock()
 
         mgr = self._make_manager(cache_ttl_seconds=300)
 
@@ -374,14 +369,14 @@ class TestConnectionManagerTTL:
         conn2 = mgr.get_connection('DEV', 'adt')
 
         assert conn1 is conn2
-        assert mock_factory.call_count == 1
+        assert mock_conn_cls.call_count == 1
 
-    @patch('sap.cli.adt_connection_from_args')
-    def test_evict_removes_cached_connection(self, mock_factory):
+    @patch('sap.adt.Connection')
+    def test_evict_removes_cached_connection(self, mock_conn_cls):
         """After evict(), the next get_connection creates a fresh connection."""
         conn_first = MagicMock(name='conn_first')
         conn_second = MagicMock(name='conn_second')
-        mock_factory.side_effect = [conn_first, conn_second]
+        mock_conn_cls.side_effect = [conn_first, conn_second]
 
         mgr = self._make_manager()
         result1 = mgr.get_connection('DEV', 'adt')
@@ -391,19 +386,19 @@ class TestConnectionManagerTTL:
 
         result2 = mgr.get_connection('DEV', 'adt')
         assert result2 is conn_second
-        assert mock_factory.call_count == 2
+        assert mock_conn_cls.call_count == 2
 
     def test_evict_noop_for_uncached(self):
         """Evicting a connection that was never cached does not raise."""
         mgr = self._make_manager()
         mgr.evict('DEV', 'adt')
 
-    @patch('sap.cli.adt_connection_from_args')
-    def test_evict_none_system_uses_default(self, mock_factory):
+    @patch('sap.adt.Connection')
+    def test_evict_none_system_uses_default(self, mock_conn_cls):
         """evict(None, factory) resolves to the default system."""
         conn_first = MagicMock(name='conn_first')
         conn_second = MagicMock(name='conn_second')
-        mock_factory.side_effect = [conn_first, conn_second]
+        mock_conn_cls.side_effect = [conn_first, conn_second]
 
         mgr = self._make_manager()
         mgr.get_connection(None, 'adt')
@@ -412,15 +407,15 @@ class TestConnectionManagerTTL:
 
         result = mgr.get_connection(None, 'adt')
         assert result is conn_second
-        assert mock_factory.call_count == 2
+        assert mock_conn_cls.call_count == 2
 
     @patch('sapclimcp.config.time.monotonic')
-    @patch('sap.cli.adt_connection_from_args')
-    def test_custom_ttl(self, mock_factory, mock_time):
+    @patch('sap.adt.Connection')
+    def test_custom_ttl(self, mock_conn_cls, mock_time):
         """A short custom TTL triggers recreation sooner."""
         conn_first = MagicMock(name='conn_first')
         conn_second = MagicMock(name='conn_second')
-        mock_factory.side_effect = [conn_first, conn_second]
+        mock_conn_cls.side_effect = [conn_first, conn_second]
 
         mgr = self._make_manager(cache_ttl_seconds=60)
 

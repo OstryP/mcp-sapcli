@@ -19,6 +19,7 @@ import requests
 
 import sap.adt
 import sap.cli
+from sap.http.errors import UnauthorizedError
 
 
 _LOGGER = logging.getLogger(__name__)
@@ -28,6 +29,25 @@ _ENV_VAR_RE = re.compile(r'^\$([A-Za-z_][A-Za-z0-9_]*)$')
 
 class ConfigError(Exception):
     """Raised for configuration loading or validation errors."""
+
+
+class CookieSessionInitializer:
+    """HTTPSessionInitializer that authenticates via pre-existing SSO cookies.
+
+    Implements the sap.http.client.HTTPSessionInitializer protocol so that
+    sapcli uses cookie-based auth instead of basic auth for the session.
+    """
+
+    def __init__(self, cookie: str) -> None:
+        self._cookie = cookie
+
+    def initialize_session(self, session: requests.Session) -> requests.Session:
+        session.auth = None
+        session.headers['Cookie'] = self._cookie
+        return session
+
+    def build_unauthorized_error(self, req, res) -> UnauthorizedError:
+        return UnauthorizedError(req, res, 'cookie-auth')
 
 
 _VALID_AUTH_TYPES = frozenset({'basic', 'cookie'})
@@ -253,65 +273,28 @@ class ConnectionManager:
             port=sys_config.port,
             ssl=sys_config.ssl,
             verify=sys_config.verify,
-            # sapcli requires non-empty user/password to construct
-            # the Connection object even when cookie auth is used
-            user=sys_config.user or 'dummy',
-            password=sys_config.password or 'dummy',
+            user=sys_config.user or 'unused',
+            password=sys_config.password or 'unused',
             ssl_server_cert=None,
         )
 
     def _create_adt_connection(self, sys_config: SystemConfig) -> sap.adt.Connection:
-        """Create an ADT connection, optionally applying cookie auth."""
+        """Create an ADT connection, using session_initializer for cookie auth."""
 
-        args = self._make_connection_args(sys_config)
-        conn = sap.cli.adt_connection_from_args(args)
-
+        initializer = None
         if sys_config.auth == 'cookie':
-            # Inject cookie auth by patching the HTTP client's build_session
-            # to set cookies and remove basic auth before the first request.
-            # This is necessary because sapcli's build_session() authenticates
-            # during session creation (CSRF token fetch).
-            # Uses private APIs on sap.adt.Connection — tested against sapcli 1.x,
-            # may need updating if internals change.
-            if not hasattr(conn, '_http_client'):
-                raise ConfigError(
-                    'Cookie auth requires sap.adt.Connection._http_client. '
-                    'This sapcli version may not be compatible.'
-                )
-            http_client = conn._http_client
-            cookie_value = sys_config.cookie
+            initializer = CookieSessionInitializer(sys_config.cookie)
 
-            # Mirrors sap.http.client.HTTPClient.build_session() from sapcli 1.x
-            # (sap/http/client.py:190-215) but replaces basic auth with cookie auth.
-            # Must be kept in sync with upstream changes to build_session().
-            def cookie_build_session():
-                session = requests.Session()
-                session.auth = None
-                session.headers['Cookie'] = cookie_value
-
-                if http_client.ssl_server_cert:
-                    session.verify = http_client.ssl_server_cert
-                elif http_client.ssl_verify is False:
-                    import urllib3
-                    urllib3.disable_warnings()
-                    session.verify = False
-
-                login_headers = {'x-csrf-token': 'Fetch'}
-                response = http_client.execute_with_session(
-                    session, http_client.login_method,
-                    http_client.login_path, headers=login_headers,
-                )
-
-                if 'x-csrf-token' in response.headers:
-                    session.headers.update({
-                        'x-csrf-token': response.headers['x-csrf-token']
-                    })
-
-                return session, response
-
-            http_client.build_session = cookie_build_session
-
-        return conn
+        return sap.adt.Connection(
+            host=sys_config.ashost,
+            client=sys_config.client,
+            user=sys_config.user or 'cookie-auth',
+            password=sys_config.password or 'unused',
+            port=sys_config.port,
+            ssl=sys_config.ssl,
+            verify=sys_config.verify,
+            session_initializer=initializer,
+        )
 
     def _create_gcts_connection(self, sys_config: SystemConfig) -> Any:
         """Create a gCTS connection."""
