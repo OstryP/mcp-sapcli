@@ -2,7 +2,6 @@
 
 import json
 import os
-import tempfile
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -53,17 +52,16 @@ class TestResolveEnvVars:
 # ---------------------------------------------------------------------------
 
 
-def _write_json(data: dict) -> str:
-    """Write data to a temp JSON file and return the path."""
-    fd, path = tempfile.mkstemp(suffix='.json')
-    with os.fdopen(fd, 'w', encoding='utf-8') as fobj:
-        json.dump(data, fobj)
-    return path
+def _write_json(tmp_path, data: dict) -> str:
+    """Write data to a JSON file in tmp_path and return the path string."""
+    path = tmp_path / 'config.json'
+    path.write_text(json.dumps(data), encoding='utf-8')
+    return str(path)
 
 
 class TestLoadConfig:
-    def test_basic_single_system(self):
-        path = _write_json({
+    def test_basic_single_system(self, tmp_path):
+        path = _write_json(tmp_path, {
             'systems': {
                 'DEV': {
                     'ashost': 'dev.example.com',
@@ -73,18 +71,15 @@ class TestLoadConfig:
                 }
             }
         })
-        try:
-            cfg = load_config(path)
-            assert 'DEV' in cfg.systems
-            assert cfg.systems['DEV'].ashost == 'dev.example.com'
-            assert cfg.default_system == 'DEV'  # auto-default for single system
-        finally:
-            os.unlink(path)
+        cfg = load_config(path)
+        assert 'DEV' in cfg.systems
+        assert cfg.systems['DEV'].ashost == 'dev.example.com'
+        assert cfg.default_system == 'DEV'  # auto-default for single system
 
-    def test_env_var_resolution(self, monkeypatch):
+    def test_env_var_resolution(self, monkeypatch, tmp_path):
         monkeypatch.setenv('TEST_SAP_USER', 'admin')
         monkeypatch.setenv('TEST_SAP_PASS', 's3cret')
-        path = _write_json({
+        path = _write_json(tmp_path, {
             'systems': {
                 'DEV': {
                     'ashost': 'dev.example.com',
@@ -95,79 +90,60 @@ class TestLoadConfig:
                 }
             }
         })
-        try:
-            cfg = load_config(path)
-            assert cfg.systems['DEV'].user == 'admin'
-            assert cfg.systems['DEV'].password == 's3cret'
-        finally:
-            os.unlink(path)
+        cfg = load_config(path)
+        assert cfg.systems['DEV'].user == 'admin'
+        assert cfg.systems['DEV'].password == 's3cret'
 
-    def test_multi_system_with_default(self):
-        path = _write_json({
+    def test_multi_system_with_default(self, tmp_path):
+        path = _write_json(tmp_path, {
             'systems': {
                 'DEV': {'ashost': 'dev.example.com', 'client': '100', 'user': 'u'},
                 'QA': {'ashost': 'qa.example.com', 'client': '200', 'user': 'u'},
             },
             'default_system': 'DEV',
         })
-        try:
-            cfg = load_config(path)
-            assert len(cfg.systems) == 2
-            assert cfg.default_system == 'DEV'
-        finally:
-            os.unlink(path)
+        cfg = load_config(path)
+        assert len(cfg.systems) == 2
+        assert cfg.default_system == 'DEV'
 
-    def test_multi_system_no_default(self):
-        path = _write_json({
+    def test_multi_system_no_default(self, tmp_path):
+        path = _write_json(tmp_path, {
             'systems': {
                 'DEV': {'ashost': 'dev.example.com', 'client': '100', 'user': 'u'},
                 'QA': {'ashost': 'qa.example.com', 'client': '200', 'user': 'u'},
             },
         })
-        try:
-            cfg = load_config(path)
-            assert cfg.default_system is None
-        finally:
-            os.unlink(path)
+        cfg = load_config(path)
+        assert cfg.default_system is None
 
-    def test_bad_default_system_raises(self):
-        path = _write_json({
+    def test_bad_default_system_raises(self, tmp_path):
+        path = _write_json(tmp_path, {
             'systems': {
                 'DEV': {'ashost': 'dev.example.com', 'client': '100', 'user': 'u'},
             },
             'default_system': 'NONEXISTENT',
         })
-        try:
-            with pytest.raises(ConfigError, match='NONEXISTENT'):
-                load_config(path)
-        finally:
-            os.unlink(path)
+        with pytest.raises(ConfigError, match='NONEXISTENT'):
+            load_config(path)
 
-    def test_empty_systems_raises(self):
-        path = _write_json({'systems': {}})
-        try:
-            with pytest.raises(ConfigError, match='At least one system'):
-                load_config(path)
-        finally:
-            os.unlink(path)
+    def test_empty_systems_raises(self, tmp_path):
+        path = _write_json(tmp_path, {'systems': {}})
+        with pytest.raises(ConfigError, match='At least one system'):
+            load_config(path)
 
     def test_missing_file_raises(self):
         with pytest.raises(ConfigError, match='Failed to load'):
             load_config('/nonexistent/path.json')
 
-    def test_invalid_json_raises(self):
-        fd, path = tempfile.mkstemp(suffix='.json')
-        with os.fdopen(fd, 'w') as fobj:
-            fobj.write('not json{{{')
-        try:
-            with pytest.raises(ConfigError, match='Failed to load'):
-                load_config(path)
-        finally:
-            os.unlink(path)
+    def test_invalid_json_raises(self, tmp_path):
+        path = tmp_path / 'bad.json'
+        path.write_text('not json{{{')
+        with pytest.raises(ConfigError, match='Failed to load'):
+            load_config(str(path))
 
-    def test_cookie_auth_system(self, monkeypatch):
+    def test_cookie_auth_system(self, monkeypatch, tmp_path):
         monkeypatch.setenv('MY_COOKIE', 'SAP_SESSIONID=abc123')
-        path = _write_json({
+        path = _write_json(tmp_path, {
             'systems': {
                 'I7D': {
                     'ashost': 'i7d.example.com',
@@ -177,12 +153,9 @@ class TestLoadConfig:
                 }
             }
         })
-        try:
-            cfg = load_config(path)
-            assert cfg.systems['I7D'].auth == 'cookie'
-            assert cfg.systems['I7D'].cookie == 'SAP_SESSIONID=abc123'
-        finally:
-            os.unlink(path)
+        cfg = load_config(path)
+        assert cfg.systems['I7D'].auth == 'cookie'
+        assert cfg.systems['I7D'].cookie == 'SAP_SESSIONID=abc123'
 
 
 # ---------------------------------------------------------------------------
