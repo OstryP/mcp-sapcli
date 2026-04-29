@@ -13,7 +13,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from types import SimpleNamespace
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 import requests
 
@@ -189,6 +189,11 @@ class ConnectionManager:
     since connections are lightweight and produce identical results.
     """
 
+    # Connectable subset — types this manager can actually serve.
+    # Broader types (rfc, odata) may be registered on tools but are
+    # not yet supported for server-managed connections.
+    _SUPPORTED_CONN_TYPES = frozenset({'adt', 'gcts'})
+
     def __init__(
         self,
         config: ServerConfig,
@@ -320,36 +325,20 @@ class ConnectionManager:
         args = self._make_connection_args(sys_config)
         return sap.cli.gcts_connection_from_args(args)
 
-    def _resolve_conn_type(self, conn_factory: Callable) -> str:
-        """Map a sapcli connection factory to a connection type string.
-
-        Raises:
-            ConfigError: If the factory is not recognized.
-        """
-
-        if conn_factory is sap.cli.adt_connection_from_args:
-            return 'adt'
-        if conn_factory is sap.cli.gcts_connection_from_args:
-            return 'gcts'
-
-        raise ConfigError(
-            f"Unsupported connection factory: {conn_factory}. "
-            "Only ADT and gCTS connections are supported."
-        )
-
     def evict(
         self,
         system_name: Optional[str],
-        conn_factory: Callable,
+        conn_type: str,
     ) -> None:
         """Remove a cached connection, forcing recreation on next access.
 
+        Unlike ``get_connection``, this method does not validate
+        ``conn_type`` — it silently no-ops for unknown types to avoid
+        raising during error recovery paths.
+
         Args:
             system_name: System name or None for default.
-            conn_factory: The sapcli connection factory function.
-
-        No-op if the connection is not cached or the system/factory
-        cannot be resolved (avoids raising during error recovery).
+            conn_type: Connection type string ('adt' or 'gcts').
         """
 
         resolved_name = system_name or self._config.default_system
@@ -360,17 +349,12 @@ class ConnectionManager:
             _LOGGER.debug("evict: system '%s' not in config, skipping", resolved_name)
             return
 
-        try:
-            conn_type = self._resolve_conn_type(conn_factory)
-        except ConfigError:
-            return
-
         self._cache.pop((resolved_name, conn_type), None)
 
     def get_connection(
         self,
         system_name: Optional[str],
-        conn_factory: Callable,
+        conn_type: str,
     ) -> Any:
         """Get or create a cached connection for the given system.
 
@@ -379,8 +363,7 @@ class ConnectionManager:
 
         Args:
             system_name: System name or None for default.
-            conn_factory: The sapcli connection factory function
-                (used to determine connection type).
+            conn_type: Connection type string ('adt' or 'gcts').
 
         Returns:
             A cached or newly created connection.
@@ -390,10 +373,14 @@ class ConnectionManager:
                 the connection type is not supported.
         """
 
+        if conn_type not in self._SUPPORTED_CONN_TYPES:
+            raise ConfigError(
+                f"Unsupported connection type '{conn_type}'. "
+                f"Supported: {', '.join(sorted(self._SUPPORTED_CONN_TYPES))}"
+            )
+
         sys_config = self._resolve_system(system_name)
         resolved_name = system_name or self._config.default_system
-
-        conn_type = self._resolve_conn_type(conn_factory)
 
         cache_key = (resolved_name, conn_type)
         entry = self._cache.get(cache_key)

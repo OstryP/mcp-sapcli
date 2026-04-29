@@ -261,13 +261,14 @@ class SapcliCommandTool(Tool):
     ) -> OperationResult:
         """Dispatch to the appropriate connection-type runner."""
 
-        if self.arg_tool.conn_factory is sap.cli.adt_connection_from_args:
+        if self.arg_tool.conn_type == 'adt':
             return self._run_adt(cmd_args, connection)
-        if self.arg_tool.conn_factory is sap.cli.gcts_connection_from_args:
+        if self.arg_tool.conn_type == 'gcts':
             return self._run_gcts(cmd_args, connection)
 
         raise SapcliCommandToolError(
-            f"Tool '{self.name}' uses unsupported connection type. "
+            f"Tool '{self.name}' uses unsupported connection type "
+            f"'{self.arg_tool.conn_type}'. "
             "Only ADT and gCTS connections are currently supported."
         )
 
@@ -303,7 +304,7 @@ class SapcliCommandTool(Tool):
         if self.connection_manager is not None:
             try:
                 connection = self.connection_manager.get_connection(
-                    system, self.arg_tool.conn_factory
+                    system, self.arg_tool.conn_type
                 )
             except ConfigError as ex:
                 raise SapcliCommandToolError(str(ex))
@@ -329,11 +330,11 @@ class SapcliCommandTool(Tool):
                 "Auth failure for system '%s', evicting connection and retrying",
                 system,
             )
-            self.connection_manager.evict(system, self.arg_tool.conn_factory)
+            self.connection_manager.evict(system, self.arg_tool.conn_type)
 
             try:
                 connection = self.connection_manager.get_connection(
-                    system, self.arg_tool.conn_factory
+                    system, self.arg_tool.conn_type
                 )
             except ConfigError as ex:
                 raise SapcliCommandToolError(str(ex))
@@ -411,6 +412,14 @@ def transform_sapcli_commands(
         sap.cli.odata_connection_from_args: ODATA_CONNECTION_PARAMS,
     }
 
+    # Resolve factory → type string once at registration time
+    conn_factory_to_type = {
+        sap.cli.adt_connection_from_args: 'adt',
+        sap.cli.rfc_connection_from_args: 'rfc',
+        sap.cli.gcts_connection_from_args: 'gcts',
+        sap.cli.odata_connection_from_args: 'odata',
+    }
+
     # Install ArgParser and build Tools definitions
     # The list items returned by sap.cli.get_commands() are tuples
     # where:
@@ -424,8 +433,12 @@ def transform_sapcli_commands(
     for conn_factory, cmd in sap.cli.get_commands():
         cmd_tool = args_tools.add_parser(cmd.name)
 
-        # Set connection factory before install_parser so sub-parsers inherit it
+        # Set connection factory and type before install_parser so sub-parsers inherit them
         cmd_tool.conn_factory = conn_factory
+        conn_type = conn_factory_to_type.get(conn_factory)
+        if conn_type is None:
+            _LOGGER.warning("Unknown connection factory %s, conn_type not set", conn_factory)
+        cmd_tool.conn_type = conn_type
 
         specific_params = conn_factory_to_params.get(conn_factory)
         if specific_params is not None:
