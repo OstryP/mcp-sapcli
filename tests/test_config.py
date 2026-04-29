@@ -465,14 +465,16 @@ class TestConnectionManagerTTL:
 
     def test_evict_none_system_no_default_is_noop(self):
         """evict(None, factory) is a no-op when no default_system is configured."""
-        sys_config = SystemConfig(
-            ashost='test.example.com',
-            client='100',
-            port=443,
-            user='admin',
-            password='secret',
+        sys_a = SystemConfig(
+            ashost='a.example.com', client='100', port=443,
+            user='admin', password='secret',
         )
-        cfg = ServerConfig(systems={'DEV': sys_config}, default_system=None)
+        sys_b = SystemConfig(
+            ashost='b.example.com', client='200', port=443,
+            user='admin', password='secret',
+        )
+        cfg = ServerConfig(systems={'A': sys_a, 'B': sys_b})
+        assert cfg.default_system is None
         mgr = ConnectionManager(cfg)
         mgr.evict(None, sap.cli.adt_connection_from_args)
 

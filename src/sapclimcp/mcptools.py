@@ -8,7 +8,6 @@ from typing import (
     Any,
     Callable,
     ClassVar,
-    FrozenSet,
     Generic,
     NamedTuple,
 )
@@ -121,11 +120,14 @@ class OperationResult(NamedTuple):
     Contents: str
 
 
+# UnauthorizedError is a subclass of SAPCliError — its except clause must
+# precede the SAPCliError catch in the functions below.
+
 def _run_adt_command(args: SimpleNamespace, command: CommandType, connection: Any = None) -> OperationResult:
     if connection is None:
         try:
             connection = sap.cli.adt_connection_from_args(args)
-        except UnauthorizedError:  # subclass of SAPCliError — must precede it
+        except UnauthorizedError:
             raise
         except errors.SAPCliError as ex:
             return OperationResult(
@@ -145,7 +147,7 @@ def _run_gcts_command(
     if connection is None:
         try:
             connection = sap.cli.gcts_connection_from_args(args)
-        except UnauthorizedError:  # subclass of SAPCliError — must precede it
+        except UnauthorizedError:
             raise
         except errors.SAPCliError as ex:
             return OperationResult(
@@ -167,7 +169,7 @@ def _run_sapcli_command(command: CommandType, conn: adt.Connection, args: Simple
 
     try:
         command(conn, args)
-    except UnauthorizedError:  # subclass of SAPCliError — must precede it
+    except UnauthorizedError:
         raise
     except errors.SAPCliError as ex:
         return OperationResult(
@@ -215,7 +217,7 @@ class SapcliCommandTool(Tool):
     connection_manager: Any = None
 
     # HTTP connection parameter names used by ADT and gCTS
-    HTTP_CONNECTION_PARAMS: ClassVar[FrozenSet[str]] = frozenset({
+    HTTP_CONNECTION_PARAMS: ClassVar[frozenset[str]] = frozenset({
         'ashost', 'port', 'client', 'user', 'password',
         'ssl', 'verify'
     })
