@@ -1,0 +1,14 @@
+{
+  "systems": {
+    "I7D": {
+      "ashost": "i7daci.bss.net.sap",
+      "port": 443,
+      "client": "001",
+      "ssl": true,
+      "verify": false,
+      "auth": "cookie",
+      "cookie": "$SAP_COOKIE_I7D"
+    }
+  },
+  "default_system": "I7D"
+}
