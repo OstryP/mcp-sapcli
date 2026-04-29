@@ -264,8 +264,8 @@ class ConnectionManager:
 
         return sys_config
 
-    def _make_connection_args(self, sys_config: SystemConfig) -> SimpleNamespace:
-        """Build a SimpleNamespace matching what sapcli connection factories expect."""
+    def _make_gcts_connection_args(self, sys_config: SystemConfig) -> SimpleNamespace:
+        """Build a SimpleNamespace matching what sapcli gCTS connection factory expects."""
 
         return SimpleNamespace(
             ashost=sys_config.ashost,
@@ -288,7 +288,7 @@ class ConnectionManager:
         return sap.adt.Connection(
             host=sys_config.ashost,
             client=sys_config.client,
-            user=sys_config.user or 'cookie-auth',
+            user=sys_config.user or 'unused',
             password=sys_config.password or 'unused',
             port=sys_config.port,
             ssl=sys_config.ssl,
@@ -305,7 +305,7 @@ class ConnectionManager:
                 'Use basic auth for gCTS systems.'
             )
 
-        args = self._make_connection_args(sys_config)
+        args = self._make_gcts_connection_args(sys_config)
         return sap.cli.gcts_connection_from_args(args)
 
     def evict(

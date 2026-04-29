@@ -279,6 +279,13 @@ class TestConnectionManager:
         assert result.auth is None
         assert result.headers['Cookie'] == 'SAP_SESSION=abc'
 
+        # Verify build_unauthorized_error returns proper error type
+        from sap.http.errors import UnauthorizedError
+        mock_req = MagicMock()
+        mock_res = MagicMock()
+        err = initializer.build_unauthorized_error(mock_req, mock_res)
+        assert isinstance(err, UnauthorizedError)
+
     @patch('sap.adt.Connection')
     def test_basic_auth_no_session_initializer(self, mock_conn_cls):
         """Basic auth passes session_initializer=None to sap.adt.Connection."""
