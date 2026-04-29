@@ -8,10 +8,8 @@ from typing import (
     Any,
     Callable,
     ClassVar,
-    FrozenSet,
     Generic,
     NamedTuple,
-    Union,
 )
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -23,6 +21,7 @@ from sap import (
     adt,
     errors,
 )
+from sap.http.errors import UnauthorizedError
 
 import sap.cli
 import sap.cli.core
@@ -40,8 +39,7 @@ from sapclimcp.config import ConfigError
 _LOGGER = logging.getLogger(__name__)
 
 # Type aliases for SAP connections and commands
-SAPConnectionType = Union[adt.Connection]
-CommandType = Callable[[SAPConnectionType, SimpleNamespace], None]
+CommandType = Callable[[adt.Connection, SimpleNamespace], None]
 
 # Connection parameters for MCP tools
 # Common parameters required for all connection types
@@ -122,10 +120,15 @@ class OperationResult(NamedTuple):
     Contents: str
 
 
-def _run_adt_command(args: SimpleNamespace, command: CommandType, connection: Any = None):
+# UnauthorizedError is a subclass of SAPCliError — its except clause must
+# precede the SAPCliError catch in the functions below.
+
+def _run_adt_command(args: SimpleNamespace, command: CommandType, connection: Any = None) -> OperationResult:
     if connection is None:
         try:
             connection = sap.cli.adt_connection_from_args(args)
+        except UnauthorizedError:
+            raise
         except errors.SAPCliError as ex:
             return OperationResult(
                     Success=False,
@@ -144,6 +147,8 @@ def _run_gcts_command(
     if connection is None:
         try:
             connection = sap.cli.gcts_connection_from_args(args)
+        except UnauthorizedError:
+            raise
         except errors.SAPCliError as ex:
             return OperationResult(
                     Success=False,
@@ -154,7 +159,7 @@ def _run_gcts_command(
     return _run_sapcli_command(command, connection, args)
 
 
-def _run_sapcli_command(command: CommandType, conn: SAPConnectionType, args: SimpleNamespace) -> OperationResult:
+def _run_sapcli_command(command: CommandType, conn: adt.Connection, args: SimpleNamespace) -> OperationResult:
 
     output_buffer = OutputBuffer()
 
@@ -164,6 +169,8 @@ def _run_sapcli_command(command: CommandType, conn: SAPConnectionType, args: Sim
 
     try:
         command(conn, args)
+    except UnauthorizedError:
+        raise
     except errors.SAPCliError as ex:
         return OperationResult(
                 Success=False,
@@ -203,14 +210,14 @@ class SapcliCommandTool(Tool):
     server-side and the LLM never sees credential parameters.
     """
 
-    # WTF is this?
+    # Pydantic requires this for fields with non-serializable types (ArgParserTool)
     model_config = {'arbitrary_types_allowed': True}
 
     arg_tool: ArgParserTool
     connection_manager: Any = None
 
     # HTTP connection parameter names used by ADT and gCTS
-    HTTP_CONNECTION_PARAMS: ClassVar[FrozenSet[str]] = frozenset({
+    HTTP_CONNECTION_PARAMS: ClassVar[frozenset[str]] = frozenset({
         'ashost', 'port', 'client', 'user', 'password',
         'ssl', 'verify'
     })
@@ -247,8 +254,29 @@ class SapcliCommandTool(Tool):
         """
         return _run_gcts_command(cmd_args, self.arg_tool.cmdfn, connection)
 
+    def _execute_command(
+            self,
+            cmd_args: SimpleNamespace,
+            connection: Any = None,
+    ) -> OperationResult:
+        """Dispatch to the appropriate connection-type runner."""
+
+        if self.arg_tool.conn_factory is sap.cli.adt_connection_from_args:
+            return self._run_adt(cmd_args, connection)
+        if self.arg_tool.conn_factory is sap.cli.gcts_connection_from_args:
+            return self._run_gcts(cmd_args, connection)
+
+        raise SapcliCommandToolError(
+            f"Tool '{self.name}' uses unsupported connection type. "
+            "Only ADT and gCTS connections are currently supported."
+        )
+
     async def run(self, arguments: dict[str, Any]) -> ToolResult:
         """Run the sapcli command with the given arguments.
+
+        When a ``connection_manager`` is set and the command fails with
+        an ``UnauthorizedError`` (HTTP 401), the stale connection is
+        evicted and the command is retried once with a fresh connection.
 
         Args:
             arguments: Dictionary containing command arguments
@@ -266,10 +294,9 @@ class SapcliCommandTool(Tool):
                 f"Tool '{self.name}' has no command function (cmdfn is None)"
             )
 
-        # Extract system before parse_args (not a sapcli argument)
-        system = arguments.get('system')
-        if 'system' in arguments:
-            del arguments['system']
+        # Work on a copy to avoid mutating the caller's dict
+        arguments = dict(arguments)
+        system = arguments.pop('system', None)
 
         # Resolve connection from manager if available
         connection = None
@@ -286,17 +313,37 @@ class SapcliCommandTool(Tool):
         except argparsertool.MissingArgument as ex:
             raise SapcliCommandToolError(str(ex))
 
-        # pylint: disable-next=comparison-with-callable
-        if self.arg_tool.conn_factory == sap.cli.adt_connection_from_args:
-            result = self._run_adt(cmd_args, connection)
-        # pylint: disable-next=comparison-with-callable
-        elif self.arg_tool.conn_factory == sap.cli.gcts_connection_from_args:
-            result = self._run_gcts(cmd_args, connection)
-        else:
-            raise SapcliCommandToolError(
-                f"Tool '{self.name}' uses unsupported connection type. "
-                "Only ADT and gCTS connections are currently supported."
+        # Retry is safe: UnauthorizedError fires during session/CSRF
+        # establishment (sap.http.client.HTTPClient.build_session), before
+        # the command body executes any writes.
+        try:
+            result = self._execute_command(cmd_args, connection)
+        except UnauthorizedError:
+            if self.connection_manager is None:
+                raise SapcliCommandToolError(
+                    "Authentication failed (HTTP 401). "
+                    "Check your credentials."
+                )
+
+            _LOGGER.info(
+                "Auth failure for system '%s', evicting connection and retrying",
+                system,
             )
+            self.connection_manager.evict(system, self.arg_tool.conn_factory)
+
+            try:
+                connection = self.connection_manager.get_connection(
+                    system, self.arg_tool.conn_factory
+                )
+            except ConfigError as ex:
+                raise SapcliCommandToolError(str(ex))
+
+            try:
+                result = self._execute_command(cmd_args, connection)
+            except UnauthorizedError as ex:
+                raise SapcliCommandToolError(
+                    f"Authentication failed after retry (HTTP 401): {ex}"
+                )
 
         # OperationResult is a NamedTuple which serializes as an array [bool, list[str], str]
         return ToolResult(
