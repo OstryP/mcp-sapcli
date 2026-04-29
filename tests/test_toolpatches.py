@@ -217,6 +217,26 @@ class TestSourceDataPatchApply:
 # ---------------------------------------------------------------------------
 
 
+class TestConnectionPatchInit:
+    """Tests for ConnectionPatch.__init__() validation."""
+
+    def test_valid_default_system(self):
+        patch = ConnectionPatch(['DEV', 'QA'], 'DEV')
+        assert patch._default_system == 'DEV'
+
+    def test_none_default_system(self):
+        patch = ConnectionPatch(['DEV', 'QA'], None)
+        assert patch._default_system is None
+
+    def test_invalid_default_system_raises(self):
+        with pytest.raises(ValueError, match="not in system_names"):
+            ConnectionPatch(['DEV', 'QA'], 'PROD')
+
+    def test_empty_system_names_with_default_raises(self):
+        with pytest.raises(ValueError, match="not in system_names"):
+            ConnectionPatch([], 'DEV')
+
+
 class TestConnectionPatchAppliesTo:
     """Tests for ConnectionPatch.applies_to()."""
 
