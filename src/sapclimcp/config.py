@@ -189,6 +189,11 @@ class ConnectionManager:
     since connections are lightweight and produce identical results.
     """
 
+    # Connectable subset — types this manager can actually serve.
+    # Broader types (rfc, odata) may be registered on tools but are
+    # not yet supported for server-managed connections.
+    _SUPPORTED_CONN_TYPES = frozenset({'adt', 'gcts'})
+
     def __init__(
         self,
         config: ServerConfig,
@@ -320,8 +325,6 @@ class ConnectionManager:
         args = self._make_connection_args(sys_config)
         return sap.cli.gcts_connection_from_args(args)
 
-    _SUPPORTED_CONN_TYPES = frozenset({'adt', 'gcts'})
-
     def evict(
         self,
         system_name: Optional[str],
@@ -329,12 +332,13 @@ class ConnectionManager:
     ) -> None:
         """Remove a cached connection, forcing recreation on next access.
 
+        Unlike ``get_connection``, this method does not validate
+        ``conn_type`` — it silently no-ops for unknown types to avoid
+        raising during error recovery paths.
+
         Args:
             system_name: System name or None for default.
             conn_type: Connection type string ('adt' or 'gcts').
-
-        No-op if the connection is not cached or the system
-        cannot be resolved (avoids raising during error recovery).
         """
 
         resolved_name = system_name or self._config.default_system

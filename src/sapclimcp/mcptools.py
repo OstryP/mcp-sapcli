@@ -435,7 +435,10 @@ def transform_sapcli_commands(
 
         # Set connection factory and type before install_parser so sub-parsers inherit them
         cmd_tool.conn_factory = conn_factory
-        cmd_tool.conn_type = conn_factory_to_type.get(conn_factory)
+        conn_type = conn_factory_to_type.get(conn_factory)
+        if conn_type is None:
+            _LOGGER.warning("Unknown connection factory %s, conn_type not set", conn_factory)
+        cmd_tool.conn_type = conn_type
 
         specific_params = conn_factory_to_params.get(conn_factory)
         if specific_params is not None:
