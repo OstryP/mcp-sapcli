@@ -125,6 +125,10 @@ class ConnectionPatch(ToolPatch):
         system_names: list[str],
         default_system: Optional[str] = None,
     ) -> None:
+        if default_system is not None and default_system not in system_names:
+            raise ValueError(
+                f"default_system {default_system!r} not in system_names {system_names}"
+            )
         self._system_names = system_names
         self._default_system = default_system
 
