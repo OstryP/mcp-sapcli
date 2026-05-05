@@ -451,6 +451,11 @@ class TestFunctionModuleDeletePatchAppliesTo:
         patch = FunctionModuleDeletePatch()
         assert patch.applies_to('abap_functionmodule_delete', tool) is True
 
+    def test_positive_functionmodule_whereused(self):
+        tool = ArgParserTool('test', None)
+        patch = FunctionModuleDeletePatch()
+        assert patch.applies_to('abap_functionmodule_whereused', tool) is True
+
     def test_negative_other_tool(self):
         tool = ArgParserTool('test', None)
         patch = FunctionModuleDeletePatch()
