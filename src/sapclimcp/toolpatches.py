@@ -103,6 +103,81 @@ class SourceDataPatch(ToolPatch):
         tool.cmdfn = wrapped_cmdfn
 
 
+class SourceFileToInlinePatch(ToolPatch):
+    """Replace file-based ``source`` (string) parameter with inline content.
+
+    Some sapcli commands (e.g. ``abap_abap_run``) expect ``source`` as a
+    single file path (string type, not array). This patch handles that case:
+    - Replaces ``source`` with ``source_data`` (a string) in the tool schema
+    - Wraps cmdfn so that source_data is written to a tempfile and
+      ``source=tmppath`` is set on args (as a plain string, not a list).
+    """
+
+    def applies_to(self, tool_name: str, tool: Any) -> bool:
+        props = tool.input_schema.properties
+        source_spec = props.get('source')
+        return source_spec is not None and source_spec.get('type') == 'string'
+
+    def apply(self, tool: Any) -> None:
+        schema = tool.input_schema
+
+        schema.properties.pop('source', None)
+        if 'source' in schema.required:
+            schema.required.remove('source')
+
+        schema.properties['source_data'] = {
+            'type': 'string',
+            'description': 'Inline source code content',
+        }
+        if 'source_data' not in schema.required:
+            schema.required.append('source_data')
+
+        original_cmdfn = tool.cmdfn
+
+        def wrapped_cmdfn(conn: Any, args: SimpleNamespace) -> None:
+            source_data = getattr(args, 'source_data', None)
+            if source_data is None:
+                original_cmdfn(conn, args)
+                return
+
+            fd, tmppath = tempfile.mkstemp(suffix='.abap')
+            try:
+                with os.fdopen(fd, 'w', encoding='utf-8') as fobj:
+                    fobj.write(source_data)
+            except Exception:
+                os.unlink(tmppath)
+                raise
+
+            args.source = tmppath
+            try:
+                original_cmdfn(conn, args)
+            finally:
+                try:
+                    os.unlink(tmppath)
+                except OSError:
+                    pass
+
+        tool.cmdfn = wrapped_cmdfn
+
+
+class FunctionModuleDeletePatch(ToolPatch):
+    """Add missing ``group`` parameter to functionmodule_delete.
+
+    The upstream sapcli CommandGroupFunctionModule does not override
+    ``define_delete`` to add the ``group`` argument (unlike create, read,
+    write, activate). This patch adds it so the tool is callable.
+    """
+
+    def applies_to(self, tool_name: str, tool: Any) -> bool:
+        return tool_name == 'abap_functionmodule_delete'
+
+    def apply(self, tool: Any) -> None:
+        schema = tool.input_schema
+        if 'group' not in schema.properties:
+            schema.properties['group'] = {'type': 'string'}
+            schema.required.insert(0, 'group')
+
+
 class ConnectionPatch(ToolPatch):
     """Strip connection parameters from tool schemas and add a system selector.
 

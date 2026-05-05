@@ -264,6 +264,32 @@ class ConnectionManager:
 
         return sys_config
 
+    def get_connection_params(self, system_name: Optional[str]) -> dict[str, Any]:
+        """Return connection parameters for the resolved system.
+
+        Some sapcli commands access connection parameters (e.g. ``client``,
+        ``user``) from the args namespace. When connections are managed
+        server-side, these parameters are stripped from the tool schema
+        but still need to be injected into the command args.
+
+        Args:
+            system_name: System name or None for default.
+
+        Returns:
+            Dictionary of connection parameter values.
+        """
+
+        sys_config = self._resolve_system(system_name)
+        return {
+            'ashost': sys_config.ashost,
+            'port': sys_config.port,
+            'client': sys_config.client,
+            'user': sys_config.user,
+            'password': sys_config.password,
+            'ssl': sys_config.ssl,
+            'verify': sys_config.verify,
+        }
+
     def _make_gcts_connection_args(self, sys_config: SystemConfig) -> SimpleNamespace:
         """Build a SimpleNamespace matching what sapcli gCTS connection factory expects."""
 

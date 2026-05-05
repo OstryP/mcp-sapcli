@@ -117,9 +117,11 @@ class ArgParserTool:
         # Save the original configuration for debugging purposes
         self._parameters[parameter] = kwargs
         try:
-            self.input_schema.properties[parameter] = _argument_spec_to_json_spec(kwargs)
+            prop_spec = _argument_spec_to_json_spec(kwargs)
         except ArgToToolConversionError as ex:
             raise ArgToToolConversionError(self.name + " " + parameter + ': ' + str(ex) + " " + str(kwargs))
+
+        self.input_schema.properties[parameter] = prop_spec
 
         hasdefault = 'default' in kwargs
         # nargs='?' or nargs='*' means the argument is optional
@@ -130,6 +132,17 @@ class ArgParserTool:
 
         if required:
             self.input_schema.required.append(parameter)
+
+        # Propagate to existing subtools: some sapcli commands add arguments
+        # to the parent parser AFTER install_parser has already created
+        # sub-parsers (e.g. badi adds --enhancement_implementation after
+        # 'list' and 'set-active' sub-commands exist). Without propagation,
+        # those sub-tools would be missing the argument in their schema.
+        for subtool in self.tools.values():
+            if parameter not in subtool.input_schema.properties:
+                subtool.input_schema.properties[parameter] = prop_spec.copy()
+                if required and parameter not in subtool.input_schema.required:
+                    subtool.input_schema.required.append(parameter)
 
     def set_defaults(self, **kwargs):
         for key, value in kwargs.items():
