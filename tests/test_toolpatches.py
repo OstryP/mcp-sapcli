@@ -6,7 +6,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sapclimcp.toolpatches import ToolPatch, SourceDataPatch, ConnectionPatch
+from sapclimcp.toolpatches import (
+    ToolPatch, SourceDataPatch, SourceFileToInlinePatch,
+    FunctionModuleDeletePatch, ConnectionPatch,
+)
 from sapclimcp.argparsertool import ArgParserTool
 
 
@@ -340,4 +343,123 @@ class TestConnectionPatchApply:
             assert param not in schema['properties']
         assert 'system' in schema['properties']
         assert 'name' in schema['properties']
+
+
+# ---------------------------------------------------------------------------
+# SourceFileToInlinePatch
+# ---------------------------------------------------------------------------
+
+
+class TestSourceFileToInlinePatchAppliesTo:
+    """Tests for SourceFileToInlinePatch.applies_to()."""
+
+    def test_positive_source_string(self):
+        tool = ArgParserTool('test', None)
+        tool.add_argument('source', type=str)
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = SourceFileToInlinePatch()
+        assert patch.applies_to('abap_abap_run', tool) is True
+
+    def test_negative_source_array(self):
+        tool = ArgParserTool('test', None)
+        tool.add_argument('source', nargs='+', type=str)
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = SourceFileToInlinePatch()
+        assert patch.applies_to('some_write', tool) is False
+
+    def test_negative_no_source(self):
+        tool = ArgParserTool('test', None)
+        tool.add_argument('--name')
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = SourceFileToInlinePatch()
+        assert patch.applies_to('some_tool', tool) is False
+
+
+class TestSourceFileToInlinePatchApply:
+    """Tests for SourceFileToInlinePatch.apply()."""
+
+    def test_schema_removes_source_adds_source_data(self):
+        tool = ArgParserTool('test', None)
+        tool.add_argument('source', type=str)
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = SourceFileToInlinePatch()
+        patch.apply(tool)
+
+        schema = tool.to_mcp_input_schema()
+        assert 'source' not in schema['properties']
+        assert 'source_data' in schema['properties']
+        assert 'source_data' in schema['required']
+
+    def test_wrapped_cmdfn_writes_tempfile_as_string(self):
+        """source is set as a string (not a list) for single-file commands."""
+        captured = {}
+
+        def original_fn(conn, args):
+            captured['source'] = args.source
+            captured['content'] = open(args.source, 'r').read()
+
+        tool = ArgParserTool('test', None)
+        tool.add_argument('source', type=str)
+        tool.set_defaults(execute=original_fn)
+
+        patch = SourceFileToInlinePatch()
+        patch.apply(tool)
+
+        tool.cmdfn(MagicMock(), SimpleNamespace(source_data='hello world'))
+
+        assert isinstance(captured['source'], str)
+        assert captured['content'] == 'hello world'
+        assert not os.path.exists(captured['source'])  # cleaned up
+
+
+# ---------------------------------------------------------------------------
+# FunctionModuleDeletePatch
+# ---------------------------------------------------------------------------
+
+
+class TestFunctionModuleDeletePatchAppliesTo:
+    """Tests for FunctionModuleDeletePatch.applies_to()."""
+
+    def test_positive_functionmodule_delete(self):
+        tool = ArgParserTool('test', None)
+        patch = FunctionModuleDeletePatch()
+        assert patch.applies_to('abap_functionmodule_delete', tool) is True
+
+    def test_negative_other_tool(self):
+        tool = ArgParserTool('test', None)
+        patch = FunctionModuleDeletePatch()
+        assert patch.applies_to('abap_functionmodule_read', tool) is False
+
+
+class TestFunctionModuleDeletePatchApply:
+    """Tests for FunctionModuleDeletePatch.apply()."""
+
+    def test_adds_group_parameter(self):
+        tool = ArgParserTool('test', None)
+        tool.add_argument('name', nargs='+', type=str)
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = FunctionModuleDeletePatch()
+        patch.apply(tool)
+
+        schema = tool.to_mcp_input_schema()
+        assert 'group' in schema['properties']
+        assert schema['properties']['group'] == {'type': 'string'}
+        assert 'group' in schema['required']
+
+    def test_does_not_overwrite_existing_group(self):
+        tool = ArgParserTool('test', None)
+        tool.add_argument('--group', default='MY_GROUP')
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = FunctionModuleDeletePatch()
+        patch.apply(tool)
+
+        schema = tool.to_mcp_input_schema()
+        # Should not overwrite existing
+        assert schema['properties']['group']['default'] == 'MY_GROUP'
 

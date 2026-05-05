@@ -355,6 +355,44 @@ class TestArgParserToolInheritance:
 
         assert child.name == "parent_child"
 
+    def test_late_parent_argument_propagates_to_existing_subtools(self):
+        """Test that adding an argument to the parent after subtools exist
+        propagates the argument to those subtools."""
+        parent = ArgParserTool("parent", None)
+        child = parent.add_parser("child")
+
+        # Add argument to parent AFTER child was created
+        parent.add_argument("-i", "--impl_name", help="test")
+
+        child_schema = child.to_mcp_input_schema()
+        assert "impl_name" in child_schema["properties"]
+        assert "impl_name" in child_schema["required"]
+
+    def test_late_parent_optional_argument_propagates(self):
+        """Test that optional arguments propagate without being required."""
+        parent = ArgParserTool("parent", None)
+        child = parent.add_parser("child")
+
+        parent.add_argument("--optional_flag", default="foo")
+
+        child_schema = child.to_mcp_input_schema()
+        assert "optional_flag" in child_schema["properties"]
+        assert "optional_flag" not in child_schema["required"]
+
+    def test_late_propagation_does_not_overwrite_existing(self):
+        """Test that propagation does not overwrite if child already has the property."""
+        parent = ArgParserTool("parent", None)
+        child = parent.add_parser("child")
+
+        # Child adds its own version first
+        child.add_argument("--shared", default="child_default")
+        # Parent adds same name later
+        parent.add_argument("--shared", default="parent_default")
+
+        child_schema = child.to_mcp_input_schema()
+        # Child's original definition should be preserved
+        assert child_schema["properties"]["shared"]["default"] == "child_default"
+
 
 class TestArgParserToolSetDefaults:
     """Tests for set_defaults method."""
