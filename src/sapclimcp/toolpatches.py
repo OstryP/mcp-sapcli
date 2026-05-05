@@ -83,6 +83,9 @@ class SourceDataPatch(ToolPatch):
                 original_cmdfn(conn, args)
                 return
 
+            if not source_data:
+                raise ValueError("source_data must not be empty")
+
             fd, tmppath = tempfile.mkstemp(suffix='.abap')
             try:
                 with os.fdopen(fd, 'w', encoding='utf-8') as fobj:
@@ -139,6 +142,9 @@ class SourceFileToInlinePatch(ToolPatch):
             if source_data is None:
                 original_cmdfn(conn, args)
                 return
+
+            if not source_data:
+                raise ValueError("source_data must not be empty")
 
             fd, tmppath = tempfile.mkstemp(suffix='.abap')
             try:

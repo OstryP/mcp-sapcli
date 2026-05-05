@@ -175,6 +175,16 @@ class TestSourceDataPatchApply:
 
         original_fn.assert_called_once_with(conn, args)
 
+    def test_empty_source_data_raises(self):
+        """Empty source_data string raises ValueError."""
+        tool = self._make_tool_with_source()
+
+        patch = SourceDataPatch()
+        patch.apply(tool)
+
+        with pytest.raises(ValueError, match="source_data must not be empty"):
+            tool.cmdfn(MagicMock(), SimpleNamespace(source_data=''))
+
     def test_unicode_content(self):
         """Handles unicode source data correctly."""
         tool = self._make_tool_with_source()
@@ -414,6 +424,18 @@ class TestSourceFileToInlinePatchApply:
         assert isinstance(captured['source'], str)
         assert captured['content'] == 'hello world'
         assert not os.path.exists(captured['source'])  # cleaned up
+
+    def test_empty_source_data_raises(self):
+        """Empty source_data string raises ValueError."""
+        tool = ArgParserTool('test', None)
+        tool.add_argument('source', type=str)
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = SourceFileToInlinePatch()
+        patch.apply(tool)
+
+        with pytest.raises(ValueError, match="source_data must not be empty"):
+            tool.cmdfn(MagicMock(), SimpleNamespace(source_data=''))
 
 
 # ---------------------------------------------------------------------------
