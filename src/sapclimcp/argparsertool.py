@@ -57,7 +57,13 @@ def _argument_spec_to_json_spec(argparserArgument):
         spec = _builtin_to_spec(typ)
 
     default = argparserArgument.get('default', None)
-    return _add_default_if_specified(spec, default)
+    _add_default_if_specified(spec, default)
+
+    choices = argparserArgument.get('choices', None)
+    if choices is not None:
+        spec['enum'] = list(choices)
+
+    return spec
 
 
 @dataclass

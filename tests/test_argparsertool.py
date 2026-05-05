@@ -218,6 +218,39 @@ class TestArgParserToolType:
             tool.add_argument("--data", type=float)
 
 
+class TestArgParserToolChoices:
+    """Tests for choices parameter → enum in JSON schema."""
+
+    def test_choices_adds_enum(self):
+        """Test that choices parameter produces an enum field."""
+        tool = ArgParserTool("test", None)
+        tool.add_argument("--type", default="main", choices=["main", "definitions", "testclasses"])
+
+        schema = tool.to_mcp_input_schema()
+
+        assert schema["properties"]["type"]["enum"] == ["main", "definitions", "testclasses"]
+        assert schema["properties"]["type"]["default"] == "main"
+
+    def test_choices_with_positional(self):
+        """Test choices on a positional argument."""
+        tool = ArgParserTool("test", None)
+        tool.add_argument("active", choices=["true", "false"])
+
+        schema = tool.to_mcp_input_schema()
+
+        assert schema["properties"]["active"]["enum"] == ["true", "false"]
+        assert "active" in schema["required"]
+
+    def test_no_choices_no_enum(self):
+        """Test that without choices, no enum field is present."""
+        tool = ArgParserTool("test", None)
+        tool.add_argument("--name")
+
+        schema = tool.to_mcp_input_schema()
+
+        assert "enum" not in schema["properties"]["name"]
+
+
 class TestArgParserToolActionStoreTrue:
     """Tests for action='store_true'."""
 
