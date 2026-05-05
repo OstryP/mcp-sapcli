@@ -167,12 +167,12 @@ class SourceFileToInlinePatch(ToolPatch):
 
 
 class FunctionModuleDeletePatch(ToolPatch):
-    """Add missing ``group`` parameter to functionmodule tools that lack it.
+    """Add missing ``group`` parameter to function module/include tools that lack it.
 
-    Workaround for upstream sapcli bug: CommandGroupFunctionModule does not
-    override ``define_delete`` or ``define_whereused`` to add the ``group``
-    argument (unlike create, read, write, activate which all call
-    ``insert_argument(0, 'group')``).
+    Workaround for upstream sapcli bug: CommandGroupFunctionModule and
+    CommandGroupFunctionGroupInclude do not override ``define_delete`` or
+    ``define_whereused`` to add the ``group`` argument (unlike create, read,
+    write, activate which all call ``insert_argument(0, 'group')``).
 
     This patch is forward-compatible: if sapcli fixes the issue upstream,
     the guard in apply() makes this a no-op. Remove this patch once sapcli
@@ -182,6 +182,8 @@ class FunctionModuleDeletePatch(ToolPatch):
     _AFFECTED_TOOLS = frozenset({
         'abap_functionmodule_delete',
         'abap_functionmodule_whereused',
+        'abap_functiongroup_include_whereused',
+        'abap_functiongroup_include_delete',
     })
 
     def applies_to(self, tool_name: str, tool: Any) -> bool:
