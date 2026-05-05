@@ -163,9 +163,13 @@ class SourceFileToInlinePatch(ToolPatch):
 class FunctionModuleDeletePatch(ToolPatch):
     """Add missing ``group`` parameter to functionmodule_delete.
 
-    The upstream sapcli CommandGroupFunctionModule does not override
-    ``define_delete`` to add the ``group`` argument (unlike create, read,
-    write, activate). This patch adds it so the tool is callable.
+    Workaround for upstream sapcli bug: CommandGroupFunctionModule does not
+    override ``define_delete`` to add the ``group`` argument (unlike create,
+    read, write, activate which all call ``insert_argument(0, 'group')``).
+
+    This patch is forward-compatible: if sapcli fixes the issue upstream,
+    the guard in apply() makes this a no-op. Remove this patch once sapcli
+    ships the fix and our minimum version requires it.
     """
 
     def applies_to(self, tool_name: str, tool: Any) -> bool:
