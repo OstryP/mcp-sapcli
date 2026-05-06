@@ -471,9 +471,8 @@ def transform_sapcli_commands(
     # pylint: disable-next=fixme
     # TODO: add name transformations such as "abap_gcts_delete" to "abap_gcts_repo_delete"
 
-    # Patch ordering matters: source patches must run before ConnectionPatch
-    # because ConnectionPatch strips params that source patches don't touch,
-    # and ConnectionPatch adds the 'system' selector last.
+    # ConnectionPatch must be last — it adds the 'system' selector after all
+    # other patches have finished modifying schemas.
     patch_registry = [SourceDataPatch(), SourceFileToInlinePatch(), MissingGroupParamPatch()]
     if connection_manager is not None:
         patch_registry.append(ConnectionPatch(

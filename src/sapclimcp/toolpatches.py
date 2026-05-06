@@ -112,8 +112,8 @@ class SourceFileToInlinePatch(SourceDataPatch):
     """Replace file-based ``source`` (string) parameter with inline content.
 
     Some sapcli commands (e.g. ``abap_abap_run``) expect ``source`` as a
-    single file path (string type, not array). This subclass overrides only
-    the type check and how source is assigned on args (plain string vs list).
+    single file path (string type, not array). Inherits ``apply()`` from
+    parent; customizes only ``applies_to`` and ``_set_source``.
     """
 
     def applies_to(self, tool_name: str, tool: Any) -> bool:

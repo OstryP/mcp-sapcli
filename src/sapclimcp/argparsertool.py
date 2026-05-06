@@ -205,7 +205,7 @@ class ArgParserTool:
             required: Whether the properties should be marked as required (default: True).
         """
         for param_name, param_spec in properties.items():
-            self.input_schema.properties[param_name] = param_spec.copy()
+            self.input_schema.properties[param_name] = copy.deepcopy(param_spec)
             if required:
                 self.input_schema.required.append(param_name)
 

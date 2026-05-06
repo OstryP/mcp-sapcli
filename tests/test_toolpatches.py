@@ -456,6 +456,7 @@ class TestSourceFileToInlinePatchApply:
         with pytest.raises(RuntimeError, match='command failed'):
             tool.cmdfn(MagicMock(), SimpleNamespace(source_data='content'))
 
+        assert isinstance(captured['source'], str)
         assert not os.path.exists(captured['source'])
 
 
