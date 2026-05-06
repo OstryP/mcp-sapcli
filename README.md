@@ -3,7 +3,7 @@
 [sapcli](https://github.com/jfilak/sapcli) is a command-line tool that enables
 access to SAP products from scripts and automation pipelines.
 
-This MCP server is build on top of [FastMCP](https://github.com/jlowin/fastmcp)
+This MCP server is built on top of [FastMCP](https://github.com/jlowin/fastmcp)
 
 ## Requirements
 
