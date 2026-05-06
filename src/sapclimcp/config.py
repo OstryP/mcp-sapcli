@@ -285,7 +285,6 @@ class ConnectionManager:
             'port': sys_config.port,
             'client': sys_config.client,
             'user': sys_config.user,
-            'password': sys_config.password,
             'ssl': sys_config.ssl,
             'verify': sys_config.verify,
         }

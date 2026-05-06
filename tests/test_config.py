@@ -480,3 +480,49 @@ class TestSystemConfigValidation:
     def test_valid_cookie_auth(self):
         cfg = SystemConfig(ashost='h', client='c', auth='cookie', cookie='SAP=abc')
         assert cfg.auth == 'cookie'
+
+
+# ---------------------------------------------------------------------------
+# ConnectionManager.get_connection_params
+# ---------------------------------------------------------------------------
+
+
+class TestGetConnectionParams:
+
+    def _make_manager(self):
+        sys = SystemConfig(
+            ashost='dev.example.com', client='100', port=443,
+            user='admin', password='secret', ssl=True, verify=False,
+        )
+        cfg = ServerConfig(systems={'DEV': sys}, default_system='DEV')
+        return ConnectionManager(cfg)
+
+    def test_returns_expected_keys(self):
+        mgr = self._make_manager()
+        params = mgr.get_connection_params('DEV')
+        assert set(params.keys()) == {'ashost', 'port', 'client', 'user', 'ssl', 'verify'}
+
+    def test_password_not_included(self):
+        mgr = self._make_manager()
+        params = mgr.get_connection_params('DEV')
+        assert 'password' not in params
+
+    def test_values_match_config(self):
+        mgr = self._make_manager()
+        params = mgr.get_connection_params('DEV')
+        assert params['ashost'] == 'dev.example.com'
+        assert params['client'] == '100'
+        assert params['port'] == 443
+        assert params['user'] == 'admin'
+        assert params['ssl'] is True
+        assert params['verify'] is False
+
+    def test_none_resolves_to_default(self):
+        mgr = self._make_manager()
+        params = mgr.get_connection_params(None)
+        assert params['ashost'] == 'dev.example.com'
+
+    def test_unknown_system_raises(self):
+        mgr = self._make_manager()
+        with pytest.raises(ConfigError, match="Unknown system"):
+            mgr.get_connection_params('PROD')

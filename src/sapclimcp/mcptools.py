@@ -37,7 +37,7 @@ from sapclimcp.argparsertool import ArgParserTool
 from sapclimcp.toolpatches import (
     SourceDataPatch,
     SourceFileToInlinePatch,
-    FunctionModuleDeletePatch,
+    MissingGroupParamPatch,
     ConnectionPatch,
     apply_patches,
 )
@@ -324,15 +324,12 @@ class SapcliCommandTool(Tool):
         # Inject connection parameters into args namespace.
         # Some sapcli commands access connection params (e.g. client, user)
         # directly from args even though they were stripped from the schema
-        # by ConnectionPatch.
+        # by ConnectionPatch. Since ConnectionPatch removes these from the
+        # schema, parse_args never sets them — unconditional setattr is safe.
         if self.connection_manager is not None:
-            try:
-                conn_params = self.connection_manager.get_connection_params(system)
-            except ConfigError:
-                conn_params = {}
+            conn_params = self.connection_manager.get_connection_params(system)
             for key, value in conn_params.items():
-                if not hasattr(cmd_args, key):
-                    setattr(cmd_args, key, value)
+                setattr(cmd_args, key, value)
 
         # Retry is safe: UnauthorizedError fires during session/CSRF
         # establishment (sap.http.client.HTTPClient.build_session), before
@@ -474,7 +471,10 @@ def transform_sapcli_commands(
     # pylint: disable-next=fixme
     # TODO: add name transformations such as "abap_gcts_delete" to "abap_gcts_repo_delete"
 
-    patch_registry = [SourceDataPatch(), SourceFileToInlinePatch(), FunctionModuleDeletePatch()]
+    # Patch ordering matters: source patches must run before ConnectionPatch
+    # because ConnectionPatch strips params that source patches don't touch,
+    # and ConnectionPatch adds the 'system' selector last.
+    patch_registry = [SourceDataPatch(), SourceFileToInlinePatch(), MissingGroupParamPatch()]
     if connection_manager is not None:
         patch_registry.append(ConnectionPatch(
             system_names=connection_manager.system_names,

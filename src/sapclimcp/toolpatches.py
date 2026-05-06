@@ -44,7 +44,7 @@ class ToolPatch(ABC):
 
 
 class SourceDataPatch(ToolPatch):
-    """Replace file-based ``source`` parameter with inline ``source_data``.
+    """Replace file-based ``source`` (array) parameter with inline ``source_data``.
 
     sapcli write commands expect ``source`` as a list of file paths.
     MCP clients cannot provide file paths, so this patch:
@@ -59,10 +59,12 @@ class SourceDataPatch(ToolPatch):
         source_spec = props.get('source')
         return source_spec is not None and source_spec.get('type') == 'array'
 
+    def _set_source(self, args: SimpleNamespace, tmppath: str) -> None:
+        args.source = [tmppath]
+
     def apply(self, tool: Any) -> None:
         schema = tool.input_schema
 
-        # Patch schema: remove source, add source_data
         schema.properties.pop('source', None)
         if 'source' in schema.required:
             schema.required.remove('source')
@@ -74,8 +76,8 @@ class SourceDataPatch(ToolPatch):
         if 'source_data' not in schema.required:
             schema.required.append('source_data')
 
-        # Wrap cmdfn: source_data -> tempfile -> source=[tmppath] -> cleanup
         original_cmdfn = tool.cmdfn
+        set_source = self._set_source
 
         def wrapped_cmdfn(conn: Any, args: SimpleNamespace) -> None:
             source_data = getattr(args, 'source_data', None)
@@ -94,7 +96,7 @@ class SourceDataPatch(ToolPatch):
                 os.unlink(tmppath)
                 raise
 
-            args.source = [tmppath]
+            set_source(args, tmppath)
             try:
                 original_cmdfn(conn, args)
             finally:
@@ -106,14 +108,12 @@ class SourceDataPatch(ToolPatch):
         tool.cmdfn = wrapped_cmdfn
 
 
-class SourceFileToInlinePatch(ToolPatch):
+class SourceFileToInlinePatch(SourceDataPatch):
     """Replace file-based ``source`` (string) parameter with inline content.
 
     Some sapcli commands (e.g. ``abap_abap_run``) expect ``source`` as a
-    single file path (string type, not array). This patch handles that case:
-    - Replaces ``source`` with ``source_data`` (a string) in the tool schema
-    - Wraps cmdfn so that source_data is written to a tempfile and
-      ``source=tmppath`` is set on args (as a plain string, not a list).
+    single file path (string type, not array). This subclass overrides only
+    the type check and how source is assigned on args (plain string vs list).
     """
 
     def applies_to(self, tool_name: str, tool: Any) -> bool:
@@ -121,52 +121,11 @@ class SourceFileToInlinePatch(ToolPatch):
         source_spec = props.get('source')
         return source_spec is not None and source_spec.get('type') == 'string'
 
-    def apply(self, tool: Any) -> None:
-        schema = tool.input_schema
-
-        schema.properties.pop('source', None)
-        if 'source' in schema.required:
-            schema.required.remove('source')
-
-        schema.properties['source_data'] = {
-            'type': 'string',
-            'description': 'Inline source code content',
-        }
-        if 'source_data' not in schema.required:
-            schema.required.append('source_data')
-
-        original_cmdfn = tool.cmdfn
-
-        def wrapped_cmdfn(conn: Any, args: SimpleNamespace) -> None:
-            source_data = getattr(args, 'source_data', None)
-            if source_data is None:
-                original_cmdfn(conn, args)
-                return
-
-            if not source_data:
-                raise ValueError("source_data must not be empty")
-
-            fd, tmppath = tempfile.mkstemp(suffix='.abap')
-            try:
-                with os.fdopen(fd, 'w', encoding='utf-8') as fobj:
-                    fobj.write(source_data)
-            except Exception:
-                os.unlink(tmppath)
-                raise
-
-            args.source = tmppath
-            try:
-                original_cmdfn(conn, args)
-            finally:
-                try:
-                    os.unlink(tmppath)
-                except OSError:
-                    pass
-
-        tool.cmdfn = wrapped_cmdfn
+    def _set_source(self, args: SimpleNamespace, tmppath: str) -> None:
+        args.source = tmppath
 
 
-class FunctionModuleDeletePatch(ToolPatch):
+class MissingGroupParamPatch(ToolPatch):
     """Add missing ``group`` parameter to function module/include tools that lack it.
 
     Workaround for upstream sapcli bug: CommandGroupFunctionModule and
@@ -193,7 +152,7 @@ class FunctionModuleDeletePatch(ToolPatch):
         schema = tool.input_schema
         if 'group' not in schema.properties:
             schema.properties['group'] = {'type': 'string'}
-            schema.required.insert(0, 'group')
+            schema.required.append('group')
 
 
 class ConnectionPatch(ToolPatch):

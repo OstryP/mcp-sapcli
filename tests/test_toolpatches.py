@@ -8,7 +8,7 @@ import pytest
 
 from sapclimcp.toolpatches import (
     ToolPatch, SourceDataPatch, SourceFileToInlinePatch,
-    FunctionModuleDeletePatch, ConnectionPatch,
+    MissingGroupParamPatch, ConnectionPatch,
 )
 from sapclimcp.argparsertool import ArgParserTool
 
@@ -410,7 +410,8 @@ class TestSourceFileToInlinePatchApply:
 
         def original_fn(conn, args):
             captured['source'] = args.source
-            captured['content'] = open(args.source, 'r').read()
+            with open(args.source, 'r', encoding='utf-8') as f:
+                captured['content'] = f.read()
 
         tool = ArgParserTool('test', None)
         tool.add_argument('source', type=str)
@@ -437,50 +438,70 @@ class TestSourceFileToInlinePatchApply:
         with pytest.raises(ValueError, match="source_data must not be empty"):
             tool.cmdfn(MagicMock(), SimpleNamespace(source_data=''))
 
+    def test_cleanup_on_command_error(self):
+        """Tempfile is cleaned up even if original command raises."""
+        captured = {}
+
+        def failing_fn(conn, args):
+            captured['source'] = args.source
+            raise RuntimeError('command failed')
+
+        tool = ArgParserTool('test', None)
+        tool.add_argument('source', type=str)
+        tool.set_defaults(execute=failing_fn)
+
+        patch = SourceFileToInlinePatch()
+        patch.apply(tool)
+
+        with pytest.raises(RuntimeError, match='command failed'):
+            tool.cmdfn(MagicMock(), SimpleNamespace(source_data='content'))
+
+        assert not os.path.exists(captured['source'])
+
 
 # ---------------------------------------------------------------------------
-# FunctionModuleDeletePatch
+# MissingGroupParamPatch
 # ---------------------------------------------------------------------------
 
 
-class TestFunctionModuleDeletePatchAppliesTo:
-    """Tests for FunctionModuleDeletePatch.applies_to()."""
+class TestMissingGroupParamPatchAppliesTo:
+    """Tests for MissingGroupParamPatch.applies_to()."""
 
     def test_positive_functionmodule_delete(self):
         tool = ArgParserTool('test', None)
-        patch = FunctionModuleDeletePatch()
+        patch = MissingGroupParamPatch()
         assert patch.applies_to('abap_functionmodule_delete', tool) is True
 
     def test_positive_functionmodule_whereused(self):
         tool = ArgParserTool('test', None)
-        patch = FunctionModuleDeletePatch()
+        patch = MissingGroupParamPatch()
         assert patch.applies_to('abap_functionmodule_whereused', tool) is True
 
     def test_positive_functiongroup_include_whereused(self):
         tool = ArgParserTool('test', None)
-        patch = FunctionModuleDeletePatch()
+        patch = MissingGroupParamPatch()
         assert patch.applies_to('abap_functiongroup_include_whereused', tool) is True
 
     def test_positive_functiongroup_include_delete(self):
         tool = ArgParserTool('test', None)
-        patch = FunctionModuleDeletePatch()
+        patch = MissingGroupParamPatch()
         assert patch.applies_to('abap_functiongroup_include_delete', tool) is True
 
     def test_negative_other_tool(self):
         tool = ArgParserTool('test', None)
-        patch = FunctionModuleDeletePatch()
+        patch = MissingGroupParamPatch()
         assert patch.applies_to('abap_functionmodule_read', tool) is False
 
 
-class TestFunctionModuleDeletePatchApply:
-    """Tests for FunctionModuleDeletePatch.apply()."""
+class TestMissingGroupParamPatchApply:
+    """Tests for MissingGroupParamPatch.apply()."""
 
     def test_adds_group_parameter(self):
         tool = ArgParserTool('test', None)
         tool.add_argument('name', nargs='+', type=str)
         tool.set_defaults(execute=lambda c, a: None)
 
-        patch = FunctionModuleDeletePatch()
+        patch = MissingGroupParamPatch()
         patch.apply(tool)
 
         schema = tool.to_mcp_input_schema()
@@ -493,7 +514,7 @@ class TestFunctionModuleDeletePatchApply:
         tool.add_argument('--group', default='MY_GROUP')
         tool.set_defaults(execute=lambda c, a: None)
 
-        patch = FunctionModuleDeletePatch()
+        patch = MissingGroupParamPatch()
         patch.apply(tool)
 
         schema = tool.to_mcp_input_schema()

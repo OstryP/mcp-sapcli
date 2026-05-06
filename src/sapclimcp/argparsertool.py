@@ -1,4 +1,5 @@
 import builtins
+import copy
 
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -20,8 +21,6 @@ class MissingArgument(Exception):
 def _add_default_if_specified(spec, default):
     if default is not None:
         spec['default'] = default
-
-    return spec
 
 
 def _builtin_to_spec(builtin_type):
@@ -146,7 +145,7 @@ class ArgParserTool:
         # those sub-tools would be missing the argument in their schema.
         for subtool in self.tools.values():
             if parameter not in subtool.input_schema.properties:
-                subtool.input_schema.properties[parameter] = prop_spec.copy()
+                subtool.input_schema.properties[parameter] = copy.deepcopy(prop_spec)
                 if required and parameter not in subtool.input_schema.required:
                     subtool.input_schema.required.append(parameter)
 
@@ -178,7 +177,7 @@ class ArgParserTool:
 
         # Inherit parent's properties
         for prop_name, prop_spec in self.input_schema.properties.items():
-            subtool.input_schema.properties[prop_name] = prop_spec.copy()
+            subtool.input_schema.properties[prop_name] = copy.deepcopy(prop_spec)
         subtool.input_schema.required.extend(self.input_schema.required)
 
         self._add_subtool(subtool)
