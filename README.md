@@ -132,15 +132,17 @@ python3 src/sapcli-mcp-server.py --experimental
 - [abap\_package\_create](https://github.com/jfilak/sapcli/blob/master/doc/commands/package.md#create) - create ABAP package
 
 - [abap\_program\_create](https://github.com/jfilak/sapcli/blob/master/doc/commands/program.md#create) - create ABAP Program
-- [abap\_program\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/program.md#read) - return code of ABAP Program
+- [abap\_program\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/program.md#read) - read source code of ABAP Program
 - [abap\_program\_write](https://github.com/jfilak/sapcli/blob/master/doc/commands/program.md#write) - write source code of ABAP Program
 - [abap\_program\_activate](https://github.com/jfilak/sapcli/blob/master/doc/commands/program.md#activate) - activate ABAP Program
 
-- [abap\_class\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/class.md#read-1) - return code of ABAP class
+- [abap\_class\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/class.md#read-1) - read source code of ABAP class
 - [abap\_class\_write](https://github.com/jfilak/sapcli/blob/master/doc/commands/class.md#write) - write source code of ABAP class
+- [abap\_include\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/include.md#read) - read source code of ABAP include
 - [abap\_include\_write](https://github.com/jfilak/sapcli/blob/master/doc/commands/include.md#write) - write source code of ABAP include
+- [abap\_interface\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/interface.md#read) - read source code of ABAP interface
 - [abap\_interface\_write](https://github.com/jfilak/sapcli/blob/master/doc/commands/interface.md#write) - write source code of ABAP interface
-- [abap\_ddl\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/ddl.md#read) - return code of CDS view
+- [abap\_ddl\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/ddl.md#read) - read source code of CDS view
 - [abap\_ddl\_write](https://github.com/jfilak/sapcli/blob/master/doc/commands/ddl.md#write) - write source code of CDS view
 - [abap\_aunit\_run](https://github.com/jfilak/sapcli/blob/master/doc/commands/aunit.md#run) - run AUnits on package, class, program, program-include, transport
 - [abap\_atc\_run](https://github.com/jfilak/sapcli/blob/master/doc/commands/atc.md#run) - run ATC checks for package, class, program
@@ -168,7 +170,6 @@ they are functional but not yet fully production-tested.
 - abap\_program\_whereused — sandbox-tested
 - abap\_include\_attributes — sandbox-tested
 - abap\_include\_create — sandbox-tested
-- abap\_include\_read — sandbox-tested
 - abap\_include\_activate — sandbox-tested
 - abap\_include\_delete — sandbox-tested
 - abap\_include\_whereused — sandbox-tested
@@ -182,7 +183,6 @@ they are functional but not yet fully production-tested.
 - abap\_class\_delete — sandbox-tested
 - abap\_class\_whereused — sandbox-tested
 - abap\_interface\_create — sandbox-tested
-- abap\_interface\_read — sandbox-tested
 - abap\_interface\_activate — sandbox-tested
 - abap\_interface\_delete — sandbox-tested
 - abap\_interface\_whereused — sandbox-tested
@@ -204,7 +204,7 @@ they are functional but not yet fully production-tested.
 - abap\_bdef\_create — sandbox-tested
 - abap\_bdef\_read — sandbox-tested
 - abap\_bdef\_write — sandbox-tested
-- abap\_bdef\_activate
+- abap\_bdef\_activate — sandbox-tested
 - abap\_bdef\_delete — sandbox-tested
 - abap\_bdef\_whereused — sandbox-tested
 
@@ -251,11 +251,11 @@ they are functional but not yet fully production-tested.
 - abap\_dataelement\_activate
 - abap\_dataelement\_delete — sandbox-tested
 - abap\_dataelement\_whereused — sandbox-tested
-- abap\_domain\_create
+- abap\_domain\_create — not supported on this system version
 - abap\_domain\_read — sandbox-tested
 - abap\_domain\_write
 - abap\_domain\_activate
-- abap\_domain\_delete
+- abap\_domain\_delete — untested (create not supported on sandbox)
 - abap\_domain\_whereused — sandbox-tested
 
 #### Transactions & Authorization Fields
@@ -269,7 +269,7 @@ they are functional but not yet fully production-tested.
 - abap\_authorizationfield\_create — placeholder (raises "not implemented yet")
 - abap\_authorizationfield\_read — sandbox-tested
 - abap\_authorizationfield\_write — placeholder (raises "not implemented yet")
-- abap\_authorizationfield\_activate
+- abap\_authorizationfield\_activate — sandbox-tested
 - abap\_authorizationfield\_delete — placeholder (raises "not implemented yet")
 - abap\_authorizationfield\_whereused — sandbox-tested
 
@@ -300,7 +300,7 @@ they are functional but not yet fully production-tested.
 - abap\_badi\_set-active
 - abap\_featuretoggle\_state — sandbox-tested
 - abap\_featuretoggle\_on — sandbox-tested (requires transport system)
-- abap\_featuretoggle\_off
+- abap\_featuretoggle\_off — sandbox-tested (requires transport system)
 
 #### RAP (RESTful ABAP Programming)
 
