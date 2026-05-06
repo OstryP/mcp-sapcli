@@ -144,22 +144,23 @@ python3 src/sapcli-mcp-server.py --experimental
 ### Experimental tools
 
 The following tools are available when the server is started with `--experimental`.
-They have been automatically generated from sapcli commands but have not been
-manually verified yet.
+They have been automatically generated from sapcli commands. Tools marked with
+"sandbox-tested" have been verified by an automated agent on a sandbox system —
+they are functional but not yet fully production-tested.
 
-- abap\_include\_attributes
-- abap\_include\_create
-- abap\_include\_read
-- abap\_include\_activate
-- abap\_interface\_create
-- abap\_interface\_read
-- abap\_interface\_activate
-- abap\_class\_attributes
-- abap\_class\_execute
-- abap\_class\_create
-- abap\_class\_activate
-- abap\_ddl\_create
-- abap\_ddl\_activate
+- abap\_include\_attributes — sandbox-tested
+- abap\_include\_create — sandbox-tested
+- abap\_include\_read — sandbox-tested
+- abap\_include\_activate — sandbox-tested
+- abap\_interface\_create — sandbox-tested
+- abap\_interface\_read — sandbox-tested
+- abap\_interface\_activate — sandbox-tested
+- abap\_class\_attributes — sandbox-tested
+- abap\_class\_execute — sandbox-tested (output not captured)
+- abap\_class\_create — sandbox-tested
+- abap\_class\_activate — sandbox-tested
+- abap\_ddl\_create — sandbox-tested
+- abap\_ddl\_activate — sandbox-tested
 - abap\_dcl\_create
 - abap\_dcl\_read
 - abap\_dcl\_write
@@ -168,8 +169,8 @@ manually verified yet.
 - abap\_bdef\_read
 - abap\_bdef\_write
 - abap\_bdef\_activate
-- abap\_functiongroup\_create
-- abap\_functiongroup\_read
+- abap\_functiongroup\_create — sandbox-tested
+- abap\_functiongroup\_read — sandbox-tested
 - abap\_functiongroup\_write
 - abap\_functiongroup\_activate
 - abap\_functiongroup\_include\_create
@@ -177,50 +178,50 @@ manually verified yet.
 - abap\_functiongroup\_include\_write
 - abap\_functiongroup\_include\_activate
 - abap\_functionmodule\_chattr
-- abap\_functionmodule\_create
-- abap\_functionmodule\_read
-- abap\_functionmodule\_write
-- abap\_functionmodule\_activate
-- abap\_atc\_customizing
-- abap\_atc\_profile\_list
+- abap\_functionmodule\_create — sandbox-tested
+- abap\_functionmodule\_read — sandbox-tested
+- abap\_functionmodule\_write — sandbox-tested
+- abap\_functionmodule\_activate — sandbox-tested
+- abap\_atc\_customizing — sandbox-tested
+- abap\_atc\_profile\_list — sandbox-tested
 - abap\_atc\_profile\_dump
-- abap\_datapreview\_osql
+- abap\_datapreview\_osql — sandbox-tested (requires data preview authorization)
 - abap\_package\_check
 - abap\_cts\_create
 - abap\_cts\_release
 - abap\_cts\_delete
 - abap\_cts\_reassign
-- abap\_cts\_list
+- abap\_cts\_list — sandbox-tested
 - abap\_checkout\_class
 - abap\_checkout\_program
 - abap\_checkout\_interface
 - abap\_checkout\_function\_group
 - abap\_checkout\_package
-- abap\_activation\_inactiveobjects\_list
-- abap\_adt\_collections
+- abap\_activation\_inactiveobjects\_list — sandbox-tested
+- abap\_adt\_collections — sandbox-tested
 - abap\_abapgit\_link
 - abap\_abapgit\_pull
 - abap\_rap\_binding\_publish
 - abap\_rap\_definition\_activate
-- abap\_table\_create
-- abap\_table\_read
-- abap\_table\_write
-- abap\_table\_activate
-- abap\_structure\_create
-- abap\_structure\_read
-- abap\_structure\_write
-- abap\_structure\_activate
+- abap\_table\_create — sandbox-tested
+- abap\_table\_read — sandbox-tested
+- abap\_table\_write — sandbox-tested
+- abap\_table\_activate — sandbox-tested
+- abap\_structure\_create — sandbox-tested
+- abap\_structure\_read — sandbox-tested
+- abap\_structure\_write — sandbox-tested
+- abap\_structure\_activate — sandbox-tested
 - abap\_dataelement\_define
-- abap\_dataelement\_create
-- abap\_dataelement\_read
+- abap\_dataelement\_create — sandbox-tested
+- abap\_dataelement\_read — sandbox-tested
 - abap\_dataelement\_write
 - abap\_dataelement\_activate
 - abap\_checkin
-- abap\_badi
-- abap\_badi\_list
+- abap\_badi — sandbox-tested
+- abap\_badi\_list — sandbox-tested
 - abap\_badi\_set-active
-- abap\_featuretoggle\_state
-- abap\_featuretoggle\_on
+- abap\_featuretoggle\_state — sandbox-tested
+- abap\_featuretoggle\_on — sandbox-tested (requires transport system)
 - abap\_featuretoggle\_off
 - abap\_gcts\_clone
 - abap\_gcts\_config
