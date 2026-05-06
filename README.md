@@ -169,7 +169,6 @@ they are functional but not yet fully production-tested.
 - abap\_include\_attributes — sandbox-tested
 - abap\_include\_create — sandbox-tested
 - abap\_include\_read — sandbox-tested
-- abap\_include\_write — sandbox-tested
 - abap\_include\_activate — sandbox-tested
 - abap\_include\_delete — sandbox-tested
 - abap\_include\_whereused — sandbox-tested
