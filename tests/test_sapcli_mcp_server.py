@@ -426,6 +426,10 @@ class TestSapcliCommandToolWithConnectionManager:
         mock_conn = MagicMock()
         mock_manager = MagicMock()
         mock_manager.get_connection.return_value = mock_conn
+        mock_manager.get_connection_params.return_value = {
+            'client': '100', 'user': 'admin', 'ashost': 'h',
+            'port': 443, 'ssl': True, 'verify': False,
+        }
 
         received_conns = []
 
@@ -457,6 +461,10 @@ class TestSapcliCommandToolWithConnectionManager:
         mock_conn = MagicMock()
         mock_manager = MagicMock()
         mock_manager.get_connection.return_value = mock_conn
+        mock_manager.get_connection_params.return_value = {
+            'client': '100', 'user': 'admin', 'ashost': 'h',
+            'port': 443, 'ssl': True, 'verify': False,
+        }
 
         received_args = []
 
@@ -478,6 +486,41 @@ class TestSapcliCommandToolWithConnectionManager:
         assert len(received_args) == 1
         assert not hasattr(received_args[0], 'system')
         assert received_args[0].name == 'TEST_OBJ'
+
+    @pytest.mark.asyncio
+    async def test_connection_params_injected_into_args(self):
+        """Connection params from manager are injected into cmd_args namespace."""
+        mock_conn = MagicMock()
+        mock_manager = MagicMock()
+        mock_manager.get_connection.return_value = mock_conn
+        mock_manager.get_connection_params.return_value = {
+            'client': '200', 'user': 'testuser', 'ashost': 'host.example.com',
+            'port': 8443, 'ssl': True, 'verify': False,
+        }
+
+        received_args = []
+
+        def tool_fn(conn, args):
+            received_args.append(args)
+
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args, conn_type='adt')
+        tool = apt.add_parser('read')
+        tool.add_argument('name')
+        tool.set_defaults(execute=tool_fn)
+
+        cmd_tool = apt.tools['tester_read']
+        sct = mcptools.SapcliCommandTool.from_argparser_tool(
+            cmd_tool, connection_manager=mock_manager,
+        )
+
+        await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+
+        args = received_args[0]
+        assert args.client == '200'
+        assert args.user == 'testuser'
+        assert args.ashost == 'host.example.com'
+        assert args.port == 8443
+        assert not hasattr(args, 'password')
 
     @pytest.mark.asyncio
     async def test_config_error_maps_to_tool_error(self):
@@ -506,6 +549,10 @@ class TestSapcliCommandToolWithConnectionManager:
         mock_conn = MagicMock()
         mock_manager = MagicMock()
         mock_manager.get_connection.return_value = mock_conn
+        mock_manager.get_connection_params.return_value = {
+            'client': '100', 'user': 'admin', 'ashost': 'h',
+            'port': 443, 'ssl': True, 'verify': False,
+        }
 
         def tool_fn(conn, args):
             pass

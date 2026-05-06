@@ -3,6 +3,7 @@ MCP tool classes and helpers for sapcli commands.
 """
 
 import logging
+from functools import partial
 from io import StringIO
 from typing import (
     Any,
@@ -33,7 +34,13 @@ from fastmcp.tools.tool import ToolResult
 
 from sapclimcp import argparsertool
 from sapclimcp.argparsertool import ArgParserTool
-from sapclimcp.toolpatches import SourceDataPatch, ConnectionPatch, apply_patches
+from sapclimcp.toolpatches import (
+    SourceDataPatch,
+    SourceFileToInlinePatch,
+    MissingGroupParamPatch,
+    ConnectionPatch,
+    apply_patches,
+)
 from sapclimcp.config import ConfigError
 
 _LOGGER = logging.getLogger(__name__)
@@ -314,6 +321,16 @@ class SapcliCommandTool(Tool):
         except argparsertool.MissingArgument as ex:
             raise SapcliCommandToolError(str(ex))
 
+        # Inject connection parameters into args namespace.
+        # Some sapcli commands access connection params (e.g. client, user)
+        # directly from args even though they were stripped from the schema
+        # by ConnectionPatch. Since ConnectionPatch removes these from the
+        # schema, parse_args never sets them — unconditional setattr is safe.
+        if self.connection_manager is not None:
+            conn_params = self.connection_manager.get_connection_params(system)
+            for key, value in conn_params.items():
+                setattr(cmd_args, key, value)
+
         # Retry is safe: UnauthorizedError fires during session/CSRF
         # establishment (sap.http.client.HTTPClient.build_session), before
         # the command body executes any writes.
@@ -435,12 +452,16 @@ def transform_sapcli_commands(
 
         # Set connection factory and type before install_parser so sub-parsers inherit them
         cmd_tool.conn_factory = conn_factory
-        conn_type = conn_factory_to_type.get(conn_factory)
+
+        # Resolve connection type — handle functools.partial wrappers
+        # (e.g. partial(odata_connection_from_args, 'UI5/...') for BSP/FLP)
+        lookup_fn = conn_factory.func if isinstance(conn_factory, partial) else conn_factory
+        conn_type = conn_factory_to_type.get(lookup_fn)
         if conn_type is None:
             _LOGGER.warning("Unknown connection factory %s, conn_type not set", conn_factory)
         cmd_tool.conn_type = conn_type
 
-        specific_params = conn_factory_to_params.get(conn_factory)
+        specific_params = conn_factory_to_params.get(lookup_fn)
         if specific_params is not None:
             cmd_tool.add_properties(specific_params)
 
@@ -450,7 +471,9 @@ def transform_sapcli_commands(
     # pylint: disable-next=fixme
     # TODO: add name transformations such as "abap_gcts_delete" to "abap_gcts_repo_delete"
 
-    patch_registry = [SourceDataPatch()]
+    # ConnectionPatch must be last — it adds the 'system' selector after all
+    # other patches have finished modifying schemas.
+    patch_registry = [SourceDataPatch(), SourceFileToInlinePatch(), MissingGroupParamPatch()]
     if connection_manager is not None:
         patch_registry.append(ConnectionPatch(
             system_names=connection_manager.system_names,

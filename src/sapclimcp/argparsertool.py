@@ -1,4 +1,5 @@
 import builtins
+import copy
 
 from dataclasses import dataclass, field
 from types import SimpleNamespace
@@ -20,8 +21,6 @@ class MissingArgument(Exception):
 def _add_default_if_specified(spec, default):
     if default is not None:
         spec['default'] = default
-
-    return spec
 
 
 def _builtin_to_spec(builtin_type):
@@ -57,7 +56,13 @@ def _argument_spec_to_json_spec(argparserArgument):
         spec = _builtin_to_spec(typ)
 
     default = argparserArgument.get('default', None)
-    return _add_default_if_specified(spec, default)
+    _add_default_if_specified(spec, default)
+
+    choices = argparserArgument.get('choices', None)
+    if choices is not None:
+        spec['enum'] = list(choices)
+
+    return spec
 
 
 @dataclass
@@ -117,9 +122,11 @@ class ArgParserTool:
         # Save the original configuration for debugging purposes
         self._parameters[parameter] = kwargs
         try:
-            self.input_schema.properties[parameter] = _argument_spec_to_json_spec(kwargs)
+            prop_spec = _argument_spec_to_json_spec(kwargs)
         except ArgToToolConversionError as ex:
             raise ArgToToolConversionError(self.name + " " + parameter + ': ' + str(ex) + " " + str(kwargs))
+
+        self.input_schema.properties[parameter] = prop_spec
 
         hasdefault = 'default' in kwargs
         # nargs='?' or nargs='*' means the argument is optional
@@ -130,6 +137,17 @@ class ArgParserTool:
 
         if required:
             self.input_schema.required.append(parameter)
+
+        # Propagate to existing subtools: some sapcli commands add arguments
+        # to the parent parser AFTER install_parser has already created
+        # sub-parsers (e.g. badi adds --enhancement_implementation after
+        # 'list' and 'set-active' sub-commands exist). Without propagation,
+        # those sub-tools would be missing the argument in their schema.
+        for subtool in self.tools.values():
+            if parameter not in subtool.input_schema.properties:
+                subtool.input_schema.properties[parameter] = copy.deepcopy(prop_spec)
+                if required and parameter not in subtool.input_schema.required:
+                    subtool.input_schema.required.append(parameter)
 
     def set_defaults(self, **kwargs):
         for key, value in kwargs.items():
@@ -159,7 +177,7 @@ class ArgParserTool:
 
         # Inherit parent's properties
         for prop_name, prop_spec in self.input_schema.properties.items():
-            subtool.input_schema.properties[prop_name] = prop_spec.copy()
+            subtool.input_schema.properties[prop_name] = copy.deepcopy(prop_spec)
         subtool.input_schema.required.extend(self.input_schema.required)
 
         self._add_subtool(subtool)
@@ -187,7 +205,7 @@ class ArgParserTool:
             required: Whether the properties should be marked as required (default: True).
         """
         for param_name, param_spec in properties.items():
-            self.input_schema.properties[param_name] = param_spec.copy()
+            self.input_schema.properties[param_name] = copy.deepcopy(param_spec)
             if required:
                 self.input_schema.required.append(param_name)
 

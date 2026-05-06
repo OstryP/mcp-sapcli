@@ -6,7 +6,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sapclimcp.toolpatches import ToolPatch, SourceDataPatch, ConnectionPatch
+from sapclimcp.toolpatches import (
+    ToolPatch, SourceDataPatch, SourceFileToInlinePatch,
+    MissingGroupParamPatch, ConnectionPatch,
+)
 from sapclimcp.argparsertool import ArgParserTool
 
 
@@ -171,6 +174,16 @@ class TestSourceDataPatchApply:
         tool.cmdfn(conn, args)
 
         original_fn.assert_called_once_with(conn, args)
+
+    def test_empty_source_data_raises(self):
+        """Empty source_data string raises ValueError."""
+        tool = self._make_tool_with_source()
+
+        patch = SourceDataPatch()
+        patch.apply(tool)
+
+        with pytest.raises(ValueError, match="source_data must not be empty"):
+            tool.cmdfn(MagicMock(), SimpleNamespace(source_data=''))
 
     def test_unicode_content(self):
         """Handles unicode source data correctly."""
@@ -340,4 +353,172 @@ class TestConnectionPatchApply:
             assert param not in schema['properties']
         assert 'system' in schema['properties']
         assert 'name' in schema['properties']
+
+
+# ---------------------------------------------------------------------------
+# SourceFileToInlinePatch
+# ---------------------------------------------------------------------------
+
+
+class TestSourceFileToInlinePatchAppliesTo:
+    """Tests for SourceFileToInlinePatch.applies_to()."""
+
+    def test_positive_source_string(self):
+        tool = ArgParserTool('test', None)
+        tool.add_argument('source', type=str)
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = SourceFileToInlinePatch()
+        assert patch.applies_to('abap_abap_run', tool) is True
+
+    def test_negative_source_array(self):
+        tool = ArgParserTool('test', None)
+        tool.add_argument('source', nargs='+', type=str)
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = SourceFileToInlinePatch()
+        assert patch.applies_to('some_write', tool) is False
+
+    def test_negative_no_source(self):
+        tool = ArgParserTool('test', None)
+        tool.add_argument('--name')
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = SourceFileToInlinePatch()
+        assert patch.applies_to('some_tool', tool) is False
+
+
+class TestSourceFileToInlinePatchApply:
+    """Tests for SourceFileToInlinePatch.apply()."""
+
+    def test_schema_removes_source_adds_source_data(self):
+        tool = ArgParserTool('test', None)
+        tool.add_argument('source', type=str)
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = SourceFileToInlinePatch()
+        patch.apply(tool)
+
+        schema = tool.to_mcp_input_schema()
+        assert 'source' not in schema['properties']
+        assert 'source_data' in schema['properties']
+        assert 'source_data' in schema['required']
+
+    def test_wrapped_cmdfn_writes_tempfile_as_string(self):
+        """source is set as a string (not a list) for single-file commands."""
+        captured = {}
+
+        def original_fn(conn, args):
+            captured['source'] = args.source
+            with open(args.source, 'r', encoding='utf-8') as f:
+                captured['content'] = f.read()
+
+        tool = ArgParserTool('test', None)
+        tool.add_argument('source', type=str)
+        tool.set_defaults(execute=original_fn)
+
+        patch = SourceFileToInlinePatch()
+        patch.apply(tool)
+
+        tool.cmdfn(MagicMock(), SimpleNamespace(source_data='hello world'))
+
+        assert isinstance(captured['source'], str)
+        assert captured['content'] == 'hello world'
+        assert not os.path.exists(captured['source'])  # cleaned up
+
+    def test_empty_source_data_raises(self):
+        """Empty source_data string raises ValueError."""
+        tool = ArgParserTool('test', None)
+        tool.add_argument('source', type=str)
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = SourceFileToInlinePatch()
+        patch.apply(tool)
+
+        with pytest.raises(ValueError, match="source_data must not be empty"):
+            tool.cmdfn(MagicMock(), SimpleNamespace(source_data=''))
+
+    def test_cleanup_on_command_error(self):
+        """Tempfile is cleaned up even if original command raises."""
+        captured = {}
+
+        def failing_fn(conn, args):
+            captured['source'] = args.source
+            raise RuntimeError('command failed')
+
+        tool = ArgParserTool('test', None)
+        tool.add_argument('source', type=str)
+        tool.set_defaults(execute=failing_fn)
+
+        patch = SourceFileToInlinePatch()
+        patch.apply(tool)
+
+        with pytest.raises(RuntimeError, match='command failed'):
+            tool.cmdfn(MagicMock(), SimpleNamespace(source_data='content'))
+
+        assert isinstance(captured['source'], str)
+        assert not os.path.exists(captured['source'])
+
+
+# ---------------------------------------------------------------------------
+# MissingGroupParamPatch
+# ---------------------------------------------------------------------------
+
+
+class TestMissingGroupParamPatchAppliesTo:
+    """Tests for MissingGroupParamPatch.applies_to()."""
+
+    def test_positive_functionmodule_delete(self):
+        tool = ArgParserTool('test', None)
+        patch = MissingGroupParamPatch()
+        assert patch.applies_to('abap_functionmodule_delete', tool) is True
+
+    def test_positive_functionmodule_whereused(self):
+        tool = ArgParserTool('test', None)
+        patch = MissingGroupParamPatch()
+        assert patch.applies_to('abap_functionmodule_whereused', tool) is True
+
+    def test_positive_functiongroup_include_whereused(self):
+        tool = ArgParserTool('test', None)
+        patch = MissingGroupParamPatch()
+        assert patch.applies_to('abap_functiongroup_include_whereused', tool) is True
+
+    def test_positive_functiongroup_include_delete(self):
+        tool = ArgParserTool('test', None)
+        patch = MissingGroupParamPatch()
+        assert patch.applies_to('abap_functiongroup_include_delete', tool) is True
+
+    def test_negative_other_tool(self):
+        tool = ArgParserTool('test', None)
+        patch = MissingGroupParamPatch()
+        assert patch.applies_to('abap_functionmodule_read', tool) is False
+
+
+class TestMissingGroupParamPatchApply:
+    """Tests for MissingGroupParamPatch.apply()."""
+
+    def test_adds_group_parameter(self):
+        tool = ArgParserTool('test', None)
+        tool.add_argument('name', nargs='+', type=str)
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = MissingGroupParamPatch()
+        patch.apply(tool)
+
+        schema = tool.to_mcp_input_schema()
+        assert 'group' in schema['properties']
+        assert schema['properties']['group'] == {'type': 'string'}
+        assert 'group' in schema['required']
+
+    def test_does_not_overwrite_existing_group(self):
+        tool = ArgParserTool('test', None)
+        tool.add_argument('--group', default='MY_GROUP')
+        tool.set_defaults(execute=lambda c, a: None)
+
+        patch = MissingGroupParamPatch()
+        patch.apply(tool)
+
+        schema = tool.to_mcp_input_schema()
+        # Should not overwrite existing
+        assert schema['properties']['group']['default'] == 'MY_GROUP'
 

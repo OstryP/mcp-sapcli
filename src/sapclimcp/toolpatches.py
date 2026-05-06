@@ -44,7 +44,7 @@ class ToolPatch(ABC):
 
 
 class SourceDataPatch(ToolPatch):
-    """Replace file-based ``source`` parameter with inline ``source_data``.
+    """Replace file-based ``source`` (array) parameter with inline ``source_data``.
 
     sapcli write commands expect ``source`` as a list of file paths.
     MCP clients cannot provide file paths, so this patch:
@@ -59,10 +59,12 @@ class SourceDataPatch(ToolPatch):
         source_spec = props.get('source')
         return source_spec is not None and source_spec.get('type') == 'array'
 
+    def _set_source(self, args: SimpleNamespace, tmppath: str) -> None:
+        args.source = [tmppath]
+
     def apply(self, tool: Any) -> None:
         schema = tool.input_schema
 
-        # Patch schema: remove source, add source_data
         schema.properties.pop('source', None)
         if 'source' in schema.required:
             schema.required.remove('source')
@@ -74,14 +76,17 @@ class SourceDataPatch(ToolPatch):
         if 'source_data' not in schema.required:
             schema.required.append('source_data')
 
-        # Wrap cmdfn: source_data -> tempfile -> source=[tmppath] -> cleanup
         original_cmdfn = tool.cmdfn
+        set_source = self._set_source
 
         def wrapped_cmdfn(conn: Any, args: SimpleNamespace) -> None:
             source_data = getattr(args, 'source_data', None)
             if source_data is None:
                 original_cmdfn(conn, args)
                 return
+
+            if not source_data:
+                raise ValueError("source_data must not be empty")
 
             fd, tmppath = tempfile.mkstemp(suffix='.abap')
             try:
@@ -91,7 +96,7 @@ class SourceDataPatch(ToolPatch):
                 os.unlink(tmppath)
                 raise
 
-            args.source = [tmppath]
+            set_source(args, tmppath)
             try:
                 original_cmdfn(conn, args)
             finally:
@@ -101,6 +106,53 @@ class SourceDataPatch(ToolPatch):
                     pass
 
         tool.cmdfn = wrapped_cmdfn
+
+
+class SourceFileToInlinePatch(SourceDataPatch):
+    """Replace file-based ``source`` (string) parameter with inline content.
+
+    Some sapcli commands (e.g. ``abap_abap_run``) expect ``source`` as a
+    single file path (string type, not array). Inherits ``apply()`` from
+    parent; customizes only ``applies_to`` and ``_set_source``.
+    """
+
+    def applies_to(self, tool_name: str, tool: Any) -> bool:
+        props = tool.input_schema.properties
+        source_spec = props.get('source')
+        return source_spec is not None and source_spec.get('type') == 'string'
+
+    def _set_source(self, args: SimpleNamespace, tmppath: str) -> None:
+        args.source = tmppath
+
+
+class MissingGroupParamPatch(ToolPatch):
+    """Add missing ``group`` parameter to function module/include tools that lack it.
+
+    Workaround for upstream sapcli bug: CommandGroupFunctionModule and
+    CommandGroupFunctionGroupInclude do not override ``define_delete`` or
+    ``define_whereused`` to add the ``group`` argument (unlike create, read,
+    write, activate which all call ``insert_argument(0, 'group')``).
+
+    This patch is forward-compatible: if sapcli fixes the issue upstream,
+    the guard in apply() makes this a no-op. Remove this patch once sapcli
+    ships the fix and our minimum version requires it.
+    """
+
+    _AFFECTED_TOOLS = frozenset({
+        'abap_functionmodule_delete',
+        'abap_functionmodule_whereused',
+        'abap_functiongroup_include_whereused',
+        'abap_functiongroup_include_delete',
+    })
+
+    def applies_to(self, tool_name: str, tool: Any) -> bool:
+        return tool_name in self._AFFECTED_TOOLS
+
+    def apply(self, tool: Any) -> None:
+        schema = tool.input_schema
+        if 'group' not in schema.properties:
+            schema.properties['group'] = {'type': 'string'}
+            schema.required.append('group')
 
 
 class ConnectionPatch(ToolPatch):
