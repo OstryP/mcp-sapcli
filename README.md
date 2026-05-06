@@ -192,21 +192,21 @@ they are functional but not yet fully production-tested.
 - abap\_ddl\_create — sandbox-tested
 - abap\_ddl\_activate — sandbox-tested
 - abap\_ddl\_delete — sandbox-tested
-- abap\_ddl\_whereused
-- abap\_ddl\_apistate\_list
+- abap\_ddl\_whereused — sandbox-tested
+- abap\_ddl\_apistate\_list — sandbox-tested
 - abap\_ddl\_apistate\_set
-- abap\_dcl\_create
-- abap\_dcl\_read
-- abap\_dcl\_write
-- abap\_dcl\_activate
-- abap\_dcl\_delete
-- abap\_dcl\_whereused
-- abap\_bdef\_create
-- abap\_bdef\_read
-- abap\_bdef\_write
+- abap\_dcl\_create — sandbox-tested
+- abap\_dcl\_read — sandbox-tested
+- abap\_dcl\_write — sandbox-tested
+- abap\_dcl\_activate — sandbox-tested
+- abap\_dcl\_delete — sandbox-tested
+- abap\_dcl\_whereused — sandbox-tested
+- abap\_bdef\_create — sandbox-tested
+- abap\_bdef\_read — sandbox-tested
+- abap\_bdef\_write — sandbox-tested
 - abap\_bdef\_activate
-- abap\_bdef\_delete
-- abap\_bdef\_whereused
+- abap\_bdef\_delete — sandbox-tested
+- abap\_bdef\_whereused — sandbox-tested
 
 #### Function Groups & Modules
 
@@ -215,20 +215,20 @@ they are functional but not yet fully production-tested.
 - abap\_functiongroup\_write
 - abap\_functiongroup\_activate
 - abap\_functiongroup\_delete — sandbox-tested
-- abap\_functiongroup\_whereused
+- abap\_functiongroup\_whereused — sandbox-tested
 - abap\_functiongroup\_include\_create
 - abap\_functiongroup\_include\_read
 - abap\_functiongroup\_include\_write
 - abap\_functiongroup\_include\_activate
 - abap\_functiongroup\_include\_delete
-- abap\_functiongroup\_include\_whereused
+- abap\_functiongroup\_include\_whereused — sandbox-tested
 - abap\_functionmodule\_chattr
 - abap\_functionmodule\_create — sandbox-tested
 - abap\_functionmodule\_read — sandbox-tested
 - abap\_functionmodule\_write — sandbox-tested
 - abap\_functionmodule\_activate — sandbox-tested
 - abap\_functionmodule\_delete — sandbox-tested
-- abap\_functionmodule\_whereused
+- abap\_functionmodule\_whereused — sandbox-tested
 
 #### Dictionary Objects
 
@@ -237,46 +237,46 @@ they are functional but not yet fully production-tested.
 - abap\_table\_write — sandbox-tested
 - abap\_table\_activate — sandbox-tested
 - abap\_table\_delete — sandbox-tested
-- abap\_table\_whereused
+- abap\_table\_whereused — sandbox-tested
 - abap\_structure\_create — sandbox-tested
 - abap\_structure\_read — sandbox-tested
 - abap\_structure\_write — sandbox-tested
 - abap\_structure\_activate — sandbox-tested
 - abap\_structure\_delete — sandbox-tested
-- abap\_structure\_whereused
+- abap\_structure\_whereused — sandbox-tested
 - abap\_dataelement\_define
 - abap\_dataelement\_create — sandbox-tested
 - abap\_dataelement\_read — sandbox-tested
 - abap\_dataelement\_write
 - abap\_dataelement\_activate
 - abap\_dataelement\_delete — sandbox-tested
-- abap\_dataelement\_whereused
+- abap\_dataelement\_whereused — sandbox-tested
 - abap\_domain\_create
 - abap\_domain\_read — sandbox-tested
 - abap\_domain\_write
 - abap\_domain\_activate
 - abap\_domain\_delete
-- abap\_domain\_whereused
+- abap\_domain\_whereused — sandbox-tested
 
 #### Transactions & Authorization Fields
 
-- abap\_transaction\_create
-- abap\_transaction\_read
+- abap\_transaction\_create — sandbox-tested
+- abap\_transaction\_read — sandbox-tested
 - abap\_transaction\_write
 - abap\_transaction\_activate
-- abap\_transaction\_delete
-- abap\_transaction\_whereused
-- abap\_authorizationfield\_create
-- abap\_authorizationfield\_read
+- abap\_transaction\_delete — sandbox-tested
+- abap\_transaction\_whereused — sandbox-tested
+- abap\_authorizationfield\_create — not implemented in ADT API
+- abap\_authorizationfield\_read — sandbox-tested
 - abap\_authorizationfield\_write
 - abap\_authorizationfield\_activate
 - abap\_authorizationfield\_delete
-- abap\_authorizationfield\_whereused
+- abap\_authorizationfield\_whereused — sandbox-tested
 
 #### Packages
 
-- abap\_package\_check
-- abap\_package\_activate
+- abap\_package\_check — sandbox-tested
+- abap\_package\_activate — sandbox-tested
 - abap\_package\_delete
 
 #### ATC
@@ -324,10 +324,10 @@ they are functional but not yet fully production-tested.
 #### gCTS
 
 - abap\_gcts\_clone
-- abap\_gcts\_config
+- abap\_gcts\_config — sandbox-tested
 - abap\_gcts\_delete
 - abap\_gcts\_checkout
-- abap\_gcts\_log
+- abap\_gcts\_log — sandbox-tested
 - abap\_gcts\_pull
 - abap\_gcts\_push
 - abap\_gcts\_commit
@@ -337,17 +337,17 @@ they are functional but not yet fully production-tested.
 - abap\_gcts\_repo\_set-url
 - abap\_gcts\_repo\_set-role-target
 - abap\_gcts\_repo\_set-role-source
-- abap\_gcts\_repo\_activities
-- abap\_gcts\_repo\_messages
-- abap\_gcts\_repo\_objects
+- abap\_gcts\_repo\_activities — sandbox-tested
+- abap\_gcts\_repo\_messages — sandbox-tested
+- abap\_gcts\_repo\_objects — sandbox-tested
 - abap\_gcts\_repo\_tasks
-- abap\_gcts\_repo\_property\_get
+- abap\_gcts\_repo\_property\_get — sandbox-tested
 - abap\_gcts\_repo\_property\_set
 - abap\_gcts\_repo\_branch\_create
 - abap\_gcts\_repo\_branch\_delete
-- abap\_gcts\_repo\_branch\_list
+- abap\_gcts\_repo\_branch\_list — sandbox-tested
 - abap\_gcts\_repo\_branch\_update\_filesystem
-- abap\_gcts\_system\_config\_get
+- abap\_gcts\_system\_config\_get — bug (KeyError upstream)
 - abap\_gcts\_system\_config\_list
 - abap\_gcts\_system\_config\_set
 - abap\_gcts\_system\_config\_unset
@@ -381,6 +381,10 @@ they are functional but not yet fully production-tested.
 - abap\_flp\_init
 
 #### Server Configuration
+
+> **Note:** These tools manage the local sapcli config file and do not require a
+> SAP connection. Currently broken — the server incorrectly requires a connection
+> type for these commands.
 
 - abap\_config\_view
 - abap\_config\_current-context
