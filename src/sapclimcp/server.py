@@ -1,10 +1,8 @@
 """MCP server factory for sapcli.
 
-This module contains the server creation logic and argument parsing,
-importable from the package without side effects.
+This module contains the server creation logic, importable from the
+package without module-level side effects.
 """
-
-import argparse
 
 from fastmcp import FastMCP
 
@@ -64,47 +62,6 @@ MCP_SERVER_INSTRUCTIONS_MANAGED = """
 """
 
 
-def parse_args():
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="MCP server exposing sapcli commands as tools"
-    )
-
-    parser.add_argument(
-        "--experimental",
-        action="store_true",
-        help="Expose all meaningful sapcli commands as tools (not just verified ones)"
-    )
-
-    parser.add_argument(
-        "--config",
-        default=None,
-        help="Path to JSON config file with system definitions "
-             "(env: SAPCLI_MCP_CONFIG)"
-    )
-
-    parser.add_argument(
-        "--stdio",
-        action="store_true",
-        help="Run in stdio transport mode (for Claude Code / MCP clients)"
-    )
-
-    parser.add_argument(
-        "--host",
-        default="127.0.0.1",
-        help="Host address to bind to (default: 127.0.0.1, HTTP mode only)"
-    )
-
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=8000,
-        help="Port to listen on (default: 8000, HTTP mode only)"
-    )
-
-    return parser.parse_args()
-
-
 def create_mcp_server(
     name: str = "sapcli",
     experimental: bool = False,
@@ -120,18 +77,15 @@ def create_mcp_server(
     Returns:
         Initialized FastMCP server with registered sapcli tools.
     """
-    connection_manager = None
-
     if config_path:
         server_config = load_config(config_path)
         connection_manager = ConnectionManager(server_config)
-
-    if connection_manager is not None:
         instructions = MCP_SERVER_INSTRUCTIONS_MANAGED.format(
             systems=', '.join(connection_manager.system_names),
             default=connection_manager.default_system or '(none)',
         )
     else:
+        connection_manager = None
         instructions = MCP_SERVER_INSTRUCTIONS
 
     mcp = FastMCP(name=name, instructions=instructions)

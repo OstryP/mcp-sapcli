@@ -7,32 +7,23 @@ This MCP server is built on top of [FastMCP](https://github.com/jlowin/fastmcp)
 
 ## Requirements
 
-Python => 3.10
+Python >= 3.12
 
 ## Installation
-
-First clone sapcli's repository because it has been published as PyPI package
-yet:
-
-```bash
-git clone https://github.com/jfilak/sapcli
-```
-
-Then make update PYTHONPATH to allow Python find the module `sap`:
-```bash
-export PYTHONPATH=$(pwd)/sapcli
-```
-
-Finally clone this MCP server repository, create virtual environment,
-and install already packaged dependencies:
 
 ```bash
 git clone https://github.com/jfilak/mcp-sapcli
 cd mcp-sapcli
-python3 -m venv ve
-source ./ve/bin/activate
-pip install fastmcp pydantic pyodata
+pip install -e .
 ```
+
+Or with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv pip install -e .
+```
+
+This installs the `sapcli-mcp` command and all dependencies (including sapcli from git).
 
 ## Usage
 
@@ -67,7 +58,7 @@ Auth types:
 Start the server in **stdio** mode (for Claude Code / MCP clients):
 
 ```bash
-SAP_COOKIE_DEV="sap-usercontext=..." python3 src/sapcli-mcp-server.py --stdio --config sapcli-mcp.json
+SAP_COOKIE_DEV="sap-usercontext=..." sapcli-mcp --stdio --config sapcli-mcp.json
 ```
 
 With this setup, **credentials are never visible to the LLM**. Tools only
@@ -79,7 +70,7 @@ expose business parameters (e.g., class name, program name) and an optional
 To start HTTP server on localhost:8000 without server-side connection management:
 
 ```bash
-python3 src/sapcli-mcp-server.py
+sapcli-mcp
 ```
 
 In this mode, every tool call requires connection parameters (ashost, client,
@@ -88,7 +79,7 @@ user, password, etc.) to be provided by the caller.
 You can customize the host and port with command line arguments (HTTP mode):
 
 ```bash
-python3 src/sapcli-mcp-server.py --host 0.0.0.0 --port 9000
+sapcli-mcp --host 0.0.0.0 --port 9000
 ```
 
 | Argument         | Default     | Description                                        |
@@ -98,6 +89,14 @@ python3 src/sapcli-mcp-server.py --host 0.0.0.0 --port 9000
 | `--experimental` | (off)       | Expose all sapcli commands, not just verified ones  |
 | `--host`         | `127.0.0.1` | Host address to bind to (HTTP mode only)           |
 | `--port`         | `8000`      | Port to listen on (HTTP mode only)                 |
+
+### Legacy invocation
+
+The old invocation still works for backwards compatibility:
+
+```bash
+python src/sapcli-mcp-server.py --stdio --experimental
+```
 
 ## Tools
 
@@ -117,7 +116,7 @@ If you are brave and not scared of possible crashes, start the MCP server with
 the command line flag `--experimental`.
 
 ```bash
-python3 src/sapcli-mcp-server.py --experimental
+sapcli-mcp --experimental
 ```
 
 ### Implementation Details
