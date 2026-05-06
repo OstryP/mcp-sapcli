@@ -266,11 +266,11 @@ they are functional but not yet fully production-tested.
 - abap\_transaction\_activate
 - abap\_transaction\_delete — sandbox-tested
 - abap\_transaction\_whereused — sandbox-tested
-- abap\_authorizationfield\_create — not implemented in sapcli
+- abap\_authorizationfield\_create — placeholder (raises "not implemented yet")
 - abap\_authorizationfield\_read — sandbox-tested
-- abap\_authorizationfield\_write — not implemented in sapcli
+- abap\_authorizationfield\_write — placeholder (raises "not implemented yet")
 - abap\_authorizationfield\_activate
-- abap\_authorizationfield\_delete — not implemented in sapcli
+- abap\_authorizationfield\_delete — placeholder (raises "not implemented yet")
 - abap\_authorizationfield\_whereused — sandbox-tested
 
 #### Packages
@@ -340,7 +340,7 @@ they are functional but not yet fully production-tested.
 - abap\_gcts\_repo\_activities — sandbox-tested
 - abap\_gcts\_repo\_messages — sandbox-tested
 - abap\_gcts\_repo\_objects — sandbox-tested
-- abap\_gcts\_repo\_tasks
+- abap\_gcts\_repo\_tasks — bug (crashes on empty task list, sapcli upstream)
 - abap\_gcts\_repo\_property\_get — sandbox-tested
 - abap\_gcts\_repo\_property\_set
 - abap\_gcts\_repo\_branch\_create
