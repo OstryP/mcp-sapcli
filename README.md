@@ -266,11 +266,11 @@ they are functional but not yet fully production-tested.
 - abap\_transaction\_activate
 - abap\_transaction\_delete — sandbox-tested
 - abap\_transaction\_whereused — sandbox-tested
-- abap\_authorizationfield\_create — not implemented in ADT API
+- abap\_authorizationfield\_create — not implemented in sapcli
 - abap\_authorizationfield\_read — sandbox-tested
-- abap\_authorizationfield\_write
+- abap\_authorizationfield\_write — not implemented in sapcli
 - abap\_authorizationfield\_activate
-- abap\_authorizationfield\_delete
+- abap\_authorizationfield\_delete — not implemented in sapcli
 - abap\_authorizationfield\_whereused — sandbox-tested
 
 #### Packages
@@ -347,7 +347,7 @@ they are functional but not yet fully production-tested.
 - abap\_gcts\_repo\_branch\_delete
 - abap\_gcts\_repo\_branch\_list — sandbox-tested
 - abap\_gcts\_repo\_branch\_update\_filesystem
-- abap\_gcts\_system\_config\_get — bug (KeyError upstream)
+- abap\_gcts\_system\_config\_get — bug (KeyError 'value' in sapcli)
 - abap\_gcts\_system\_config\_list
 - abap\_gcts\_system\_config\_set
 - abap\_gcts\_system\_config\_unset
