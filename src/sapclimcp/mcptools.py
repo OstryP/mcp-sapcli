@@ -42,6 +42,7 @@ from sapclimcp.toolpatches import (
     apply_patches,
 )
 from sapclimcp.config import ConfigError
+from sapclimcp.errors import format_auth_error, format_connection_error
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -137,9 +138,16 @@ def _run_adt_command(args: SimpleNamespace, command: CommandType, connection: An
         except UnauthorizedError:
             raise
         except errors.SAPCliError as ex:
+            messages = format_connection_error(
+                host=getattr(args, 'ashost', 'unknown'),
+                port=getattr(args, 'port', 443),
+                ssl=getattr(args, 'ssl', True),
+                original_error=ex,
+                service_type='ADT',
+            )
             return OperationResult(
                     Success=False,
-                    LogMessages=['Could not connect to ADT Server', str(ex)],
+                    LogMessages=messages,
                     Contents=""
                 )
 
@@ -157,9 +165,16 @@ def _run_gcts_command(
         except UnauthorizedError:
             raise
         except errors.SAPCliError as ex:
+            messages = format_connection_error(
+                host=getattr(args, 'ashost', 'unknown'),
+                port=getattr(args, 'port', 443),
+                ssl=getattr(args, 'ssl', True),
+                original_error=ex,
+                service_type='gCTS',
+            )
             return OperationResult(
                     Success=False,
-                    LogMessages=['Could not connect to ABAP HTTP Server', str(ex)],
+                    LogMessages=messages,
                     Contents=""
                 )
 
@@ -279,6 +294,15 @@ class SapcliCommandTool(Tool):
             "Only ADT and gCTS connections are currently supported."
         )
 
+    def _get_auth_context(self, system: Any) -> dict[str, str]:
+        """Get auth context for error formatting."""
+        if self.connection_manager is not None:
+            try:
+                return self.connection_manager.get_auth_context(system)
+            except ConfigError:
+                pass
+        return {'auth_type': 'basic', 'host': 'unknown', 'system_name': str(system or 'unknown')}
+
     async def run(self, arguments: dict[str, Any]) -> ToolResult:
         """Run the sapcli command with the given arguments.
 
@@ -336,11 +360,16 @@ class SapcliCommandTool(Tool):
         # the command body executes any writes.
         try:
             result = self._execute_command(cmd_args, connection)
-        except UnauthorizedError:
+        except UnauthorizedError as ex:
             if self.connection_manager is None:
+                ctx = self._get_auth_context(system)
                 raise SapcliCommandToolError(
-                    "Authentication failed (HTTP 401). "
-                    "Check your credentials."
+                    format_auth_error(
+                        auth_type=ctx['auth_type'],
+                        system_name=ctx['system_name'],
+                        host=ctx['host'],
+                        original_error=ex,
+                    )
                 )
 
             _LOGGER.info(
@@ -359,9 +388,23 @@ class SapcliCommandTool(Tool):
             try:
                 result = self._execute_command(cmd_args, connection)
             except UnauthorizedError as ex:
+                ctx = self._get_auth_context(system)
                 raise SapcliCommandToolError(
-                    f"Authentication failed after retry (HTTP 401): {ex}"
+                    format_auth_error(
+                        auth_type=ctx['auth_type'],
+                        system_name=ctx['system_name'],
+                        host=ctx['host'],
+                        original_error=ex,
+                        is_retry=True,
+                    )
                 )
+        except SapcliCommandToolError:
+            raise
+        except Exception as ex:
+            raise SapcliCommandToolError(
+                f"Unexpected error in tool '{self.name}': "
+                f"{type(ex).__name__}: {ex}. This is likely a bug."
+            ) from ex
 
         # OperationResult is a NamedTuple which serializes as an array [bool, list[str], str]
         return ToolResult(
