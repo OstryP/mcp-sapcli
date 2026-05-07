@@ -2,7 +2,7 @@
 
 import pytest
 
-from .helpers import call_tool_ok
+from .helpers import call_tool_ok, call_tool_check
 
 
 @pytest.mark.asyncio
@@ -25,4 +25,14 @@ class TestConnectivity:
             }
         )
         # $TMP always exists — content may be empty but call must succeed
+        assert content is not None
+
+    async def test_03_gcts_repolist(self, mcp_client, system_name):
+        """Verify gCTS connectivity (different conn_type than ADT)."""
+        success, log_msgs, content = await call_tool_check(
+            mcp_client, "abap_gcts_repolist", {"system": system_name}
+        )
+        if not success:
+            pytest.skip(f"gCTS not available on this system: {log_msgs}")
+        # gCTS repolist returns repo data (may be empty list on fresh system)
         assert content is not None
