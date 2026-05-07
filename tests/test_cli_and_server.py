@@ -47,7 +47,7 @@ class TestCreateMcpServer:
         server = create_mcp_server()
         assert server.name == "sapcli"
         # Verify tools were actually registered (not an empty server)
-        tools = asyncio.run(server._list_tools())
+        tools = asyncio.run(server.list_tools())
         assert len(tools) >= len(VERIFIED_COMMANDS)
 
     def test_creates_server_with_name(self):
@@ -68,10 +68,9 @@ class TestCreateMcpServer:
 class TestCliMain:
     """Tests for cli.main()."""
 
-    @patch.dict(os.environ, {}, clear=False)
     @patch('sapclimcp.cli.create_mcp_server')
-    def test_main_stdio(self, mock_create):
-        os.environ.pop('SAPCLI_MCP_CONFIG', None)
+    def test_main_stdio(self, mock_create, monkeypatch):
+        monkeypatch.delenv('SAPCLI_MCP_CONFIG', raising=False)
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
@@ -83,15 +82,18 @@ class TestCliMain:
         )
         mock_server.run.assert_called_once_with(transport="stdio")
 
-    @patch.dict(os.environ, {}, clear=False)
     @patch('sapclimcp.cli.create_mcp_server')
-    def test_main_http(self, mock_create):
-        os.environ.pop('SAPCLI_MCP_CONFIG', None)
+    def test_main_http(self, mock_create, monkeypatch):
+        monkeypatch.delenv('SAPCLI_MCP_CONFIG', raising=False)
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
         main(["--host", "0.0.0.0", "--port", "9000"])
 
+        mock_create.assert_called_once_with(
+            experimental=False,
+            config_path=None,
+        )
         mock_server.run.assert_called_once_with(
             transport="http", host="0.0.0.0", port=9000
         )
@@ -109,12 +111,12 @@ class TestCliMain:
         )
 
     @patch('sapclimcp.cli.create_mcp_server')
-    def test_main_config_from_env(self, mock_create):
+    def test_main_config_from_env(self, mock_create, monkeypatch):
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
-        with patch.dict(os.environ, {'SAPCLI_MCP_CONFIG': '/env/config.json'}):
-            main(["--stdio"])
+        monkeypatch.setenv('SAPCLI_MCP_CONFIG', '/env/config.json')
+        main(["--stdio"])
 
         mock_create.assert_called_once_with(
             experimental=False,
@@ -122,13 +124,13 @@ class TestCliMain:
         )
 
     @patch('sapclimcp.cli.create_mcp_server')
-    def test_cli_arg_takes_precedence_over_env(self, mock_create):
+    def test_cli_arg_takes_precedence_over_env(self, mock_create, monkeypatch):
         """CLI --config flag takes priority over SAPCLI_MCP_CONFIG env var."""
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
-        with patch.dict(os.environ, {'SAPCLI_MCP_CONFIG': '/env/config.json'}):
-            main(["--stdio", "--config", "explicit.json"])
+        monkeypatch.setenv('SAPCLI_MCP_CONFIG', '/env/config.json')
+        main(["--stdio", "--config", "explicit.json"])
 
         mock_create.assert_called_once_with(
             experimental=False,

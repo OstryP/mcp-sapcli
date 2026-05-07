@@ -1,5 +1,7 @@
 """Launch the sapcli MCP server with default config.
 
+Requires: pip install -e . (or uv pip install -e .)
+
 This is a convenience launcher that:
 - Sets SAP_COOKIE_I7D placeholder if not provided (prevents config loader failure)
 - Suppresses stderr (required for clean MCP stdio transport)
