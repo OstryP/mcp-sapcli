@@ -92,10 +92,11 @@ sapcli-mcp --host 0.0.0.0 --port 9000
 
 ### Legacy invocation
 
-The old invocation still works for backwards compatibility:
+The old invocation still works for backwards compatibility (requires the
+package to be installed or `PYTHONPATH` set to `src/`):
 
 ```bash
-python src/sapcli-mcp-server.py --stdio --experimental
+python src/sapcli-mcp-server.py --stdio --experimental --config sapcli-mcp.json
 ```
 
 ## Tools

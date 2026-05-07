@@ -1,5 +1,6 @@
 """Tests for sapclimcp.server and sapclimcp.cli."""
 
+import asyncio
 import os
 from unittest.mock import patch, MagicMock
 
@@ -42,10 +43,12 @@ class TestParseArgs:
 class TestCreateMcpServer:
     """Tests for create_mcp_server."""
 
-    def test_creates_server_without_config(self):
+    def test_creates_server_with_verified_tools(self):
         server = create_mcp_server()
-        assert server is not None
         assert server.name == "sapcli"
+        # Verify tools were actually registered (not an empty server)
+        tools = asyncio.run(server._list_tools())
+        assert len(tools) >= len(VERIFIED_COMMANDS)
 
     def test_creates_server_with_name(self):
         server = create_mcp_server(name="test-server")
@@ -65,8 +68,10 @@ class TestCreateMcpServer:
 class TestCliMain:
     """Tests for cli.main()."""
 
+    @patch.dict(os.environ, {}, clear=False)
     @patch('sapclimcp.cli.create_mcp_server')
     def test_main_stdio(self, mock_create):
+        os.environ.pop('SAPCLI_MCP_CONFIG', None)
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
@@ -78,8 +83,10 @@ class TestCliMain:
         )
         mock_server.run.assert_called_once_with(transport="stdio")
 
+    @patch.dict(os.environ, {}, clear=False)
     @patch('sapclimcp.cli.create_mcp_server')
     def test_main_http(self, mock_create):
+        os.environ.pop('SAPCLI_MCP_CONFIG', None)
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
@@ -112,6 +119,20 @@ class TestCliMain:
         mock_create.assert_called_once_with(
             experimental=False,
             config_path="/env/config.json",
+        )
+
+    @patch('sapclimcp.cli.create_mcp_server')
+    def test_cli_arg_takes_precedence_over_env(self, mock_create):
+        """CLI --config flag takes priority over SAPCLI_MCP_CONFIG env var."""
+        mock_server = MagicMock()
+        mock_create.return_value = mock_server
+
+        with patch.dict(os.environ, {'SAPCLI_MCP_CONFIG': '/env/config.json'}):
+            main(["--stdio", "--config", "explicit.json"])
+
+        mock_create.assert_called_once_with(
+            experimental=False,
+            config_path="explicit.json",
         )
 
     @patch('sapclimcp.cli.create_mcp_server')

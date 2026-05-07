@@ -1,7 +1,6 @@
 """
-Export sapcli commands as MCP tools.
+Backwards-compatible launcher for the sapcli MCP server.
 
-This script is kept for backwards compatibility.
 Prefer running via the installed entry point: sapcli-mcp
 """
 

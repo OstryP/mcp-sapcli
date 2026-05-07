@@ -8,7 +8,7 @@ from sapclimcp.config import ConfigError
 from sapclimcp.server import create_mcp_server
 
 
-def parse_args(argv: list[str] | None = None):
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description="MCP server exposing sapcli commands as tools"
