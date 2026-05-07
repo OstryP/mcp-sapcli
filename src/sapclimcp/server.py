@@ -1,0 +1,94 @@
+"""MCP server factory for sapcli.
+
+This module contains the server creation logic, importable from the
+package without module-level side effects.
+"""
+
+from fastmcp import FastMCP
+
+from sapclimcp.mcptools import transform_sapcli_commands
+from sapclimcp.config import load_config, ConnectionManager
+
+# List of verified and supported sapcli commands exposed as MCP tools
+VERIFIED_COMMANDS = [
+    "abap_package_list",
+    "abap_package_stat",
+    "abap_package_create",
+    "abap_program_create",
+    "abap_program_read",
+    "abap_program_write",
+    "abap_program_activate",
+    "abap_gcts_repolist",
+    "abap_class_read",
+    "abap_class_write",
+    "abap_include_read",
+    "abap_include_write",
+    "abap_interface_read",
+    "abap_interface_write",
+    "abap_aunit_run",
+    "abap_atc_run",
+    "abap_ddl_read",
+    "abap_ddl_write",
+]
+
+MCP_SERVER_INSTRUCTIONS = """
+    This server connects to various SAP products and allows you to read and
+    write their contents.
+    For ABAP functions you can use features that requires HTTP or RFC.
+    Both HTTP and RFC requires:
+    - ASHOST   : Application Server host name
+    - CLIENT   : ABAP Client (3 upper case letters+digits)
+    - USER     : user name (case insensitive)
+    - PASSWORD : password (case sensitive)
+    For HTTP features (ADT, gCTS both use HTTP), you must provide:
+    - HTTPPORT   : the HTTP port
+    - USE_SSL    : true for HTTPS; false for naked HTTP
+    - VERIFY_SSL : true to check ABAP server cert validity; otherwise false
+    For RFC features, you must have the PyRFC library with NWRFC SDK
+    installed on your machine and then you must provide:
+    - SYSNR : 2 digits from 00 to 99 which will be translated to port
+"""
+
+MCP_SERVER_INSTRUCTIONS_MANAGED = """
+    This server connects to SAP ABAP systems via ADT (ABAP Development Tools)
+    REST API. Connections are managed server-side — you do not need to provide
+    credentials.
+
+    Available systems: {systems}
+    Default system: {default}
+
+    Use the optional 'system' parameter to target a specific system.
+    If omitted, the default system is used.
+"""
+
+
+def create_mcp_server(
+    name: str = "sapcli",
+    experimental: bool = False,
+    config_path: str | None = None,
+) -> FastMCP:
+    """Create and initialize the MCP server with sapcli commands.
+
+    Args:
+        name: Name for the MCP server instance.
+        experimental: If True, expose all meaningful commands; otherwise only verified ones.
+        config_path: Optional path to JSON config file with system definitions.
+
+    Returns:
+        Initialized FastMCP server with registered sapcli tools.
+    """
+    if config_path:
+        server_config = load_config(config_path)
+        connection_manager = ConnectionManager(server_config)
+        instructions = MCP_SERVER_INSTRUCTIONS_MANAGED.format(
+            systems=', '.join(connection_manager.system_names),
+            default=connection_manager.default_system or '(none)',
+        )
+    else:
+        connection_manager = None
+        instructions = MCP_SERVER_INSTRUCTIONS
+
+    mcp = FastMCP(name=name, instructions=instructions)
+    allowed_commands = None if experimental else VERIFIED_COMMANDS
+    transform_sapcli_commands(mcp, allowed_commands, connection_manager=connection_manager)
+    return mcp

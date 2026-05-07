@@ -29,6 +29,9 @@ def sample_adt_config():
         'ssl': True,
         'verify': False,
         'ssl_server_cert': None,
+        'token_url': None,
+        'client_id': None,
+        'client_secret': None,
     }
 
 

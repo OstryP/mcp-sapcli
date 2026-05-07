@@ -77,15 +77,9 @@ def create_client(args):
     # Local in-memory mode - import and use the server directly
     # Import here to avoid loading SAP modules when using HTTP mode
     # pylint: disable=import-outside-toplevel
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "sapcli_mcp_server",
-        "src/sapcli-mcp-server.py"
-    )
-    server_module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(server_module)
+    from sapclimcp.server import create_mcp_server
 
-    mcp = server_module.create_mcp_server(
+    mcp = create_mcp_server(
         name="sapcli-local",
         experimental=args.experimental
     )

@@ -1,9 +1,13 @@
-"""Launch the sapcli MCP server.
+"""Launch the sapcli MCP server with default config.
 
-Sets a placeholder for SAP_COOKIE_I7D if not already provided
-externally, so the config loader doesn't fail on startup.
-Cookie acquisition is an external concern — users provide it
-via environment variable before launching.
+Requires: pip install -e . (or uv pip install -e .)
+
+This is a convenience launcher that:
+- Sets SAP_COOKIE_I7D placeholder if not provided (prevents config loader failure)
+- Suppresses stderr (required for clean MCP stdio transport)
+- Defaults to --stdio --experimental with local sapcli-mcp.json config
+
+For direct usage, prefer the installed entry point: sapcli-mcp
 """
 
 import os
@@ -17,15 +21,10 @@ def main():
     if not os.environ.get('SAP_COOKIE_I7D'):
         os.environ['SAP_COOKIE_I7D'] = 'NOT_SET'
 
-    src_dir = os.path.join(HERE, 'src')
-    env = os.environ.copy()
-    env['PYTHONPATH'] = src_dir + os.pathsep + env.get('PYTHONPATH', '')
-
-    server = os.path.join(HERE, 'src', 'sapcli-mcp-server.py')
     config = os.path.join(HERE, 'sapcli-mcp.json')
     sys.exit(subprocess.call(
-        [sys.executable, server, '--stdio', '--config', config, '--experimental'],
-        env=env,
+        [sys.executable, '-m', 'sapclimcp',
+         '--stdio', '--config', config, '--experimental'],
         stderr=subprocess.DEVNULL,
     ))
 

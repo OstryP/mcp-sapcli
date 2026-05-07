@@ -3,36 +3,27 @@
 [sapcli](https://github.com/jfilak/sapcli) is a command-line tool that enables
 access to SAP products from scripts and automation pipelines.
 
-This MCP server is build on top of [FastMCP](https://github.com/jlowin/fastmcp)
+This MCP server is built on top of [FastMCP](https://github.com/jlowin/fastmcp)
 
 ## Requirements
 
-Python => 3.10
+Python >= 3.12
 
 ## Installation
-
-First clone sapcli's repository because it has been published as PyPI package
-yet:
-
-```bash
-git clone https://github.com/jfilak/sapcli
-```
-
-Then make update PYTHONPATH to allow Python find the module `sap`:
-```bash
-export PYTHONPATH=$(pwd)/sapcli
-```
-
-Finally clone this MCP server repository, create virtual environment,
-and install already packaged dependencies:
 
 ```bash
 git clone https://github.com/jfilak/mcp-sapcli
 cd mcp-sapcli
-python3 -m venv ve
-source ./ve/bin/activate
-pip install fastmcp pydantic pyodata
+pip install -e .
 ```
+
+Or with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv pip install -e .
+```
+
+This installs the `sapcli-mcp` command and all dependencies (including sapcli from git).
 
 ## Usage
 
@@ -67,7 +58,7 @@ Auth types:
 Start the server in **stdio** mode (for Claude Code / MCP clients):
 
 ```bash
-SAP_COOKIE_DEV="sap-usercontext=..." python3 src/sapcli-mcp-server.py --stdio --config sapcli-mcp.json
+SAP_COOKIE_DEV="sap-usercontext=..." sapcli-mcp --stdio --config sapcli-mcp.json
 ```
 
 With this setup, **credentials are never visible to the LLM**. Tools only
@@ -79,7 +70,7 @@ expose business parameters (e.g., class name, program name) and an optional
 To start HTTP server on localhost:8000 without server-side connection management:
 
 ```bash
-python3 src/sapcli-mcp-server.py
+sapcli-mcp
 ```
 
 In this mode, every tool call requires connection parameters (ashost, client,
@@ -88,7 +79,7 @@ user, password, etc.) to be provided by the caller.
 You can customize the host and port with command line arguments (HTTP mode):
 
 ```bash
-python3 src/sapcli-mcp-server.py --host 0.0.0.0 --port 9000
+sapcli-mcp --host 0.0.0.0 --port 9000
 ```
 
 | Argument         | Default     | Description                                        |
@@ -98,6 +89,15 @@ python3 src/sapcli-mcp-server.py --host 0.0.0.0 --port 9000
 | `--experimental` | (off)       | Expose all sapcli commands, not just verified ones  |
 | `--host`         | `127.0.0.1` | Host address to bind to (HTTP mode only)           |
 | `--port`         | `8000`      | Port to listen on (HTTP mode only)                 |
+
+### Legacy invocation
+
+The old invocation still works for backwards compatibility (requires the
+package to be installed or `PYTHONPATH` set to `src/`):
+
+```bash
+python src/sapcli-mcp-server.py --stdio --experimental --config sapcli-mcp.json
+```
 
 ## Tools
 
@@ -117,7 +117,7 @@ If you are brave and not scared of possible crashes, start the MCP server with
 the command line flag `--experimental`.
 
 ```bash
-python3 src/sapcli-mcp-server.py --experimental
+sapcli-mcp --experimental
 ```
 
 ### Implementation Details
@@ -129,14 +129,21 @@ python3 src/sapcli-mcp-server.py --experimental
 ### Verified tools
 - [abap\_package\_list](https://github.com/jfilak/sapcli/blob/master/doc/commands/package.md#list) - list objects belonging to ABAP package hierarchy
 - [abap\_package\_stat](https://github.com/jfilak/sapcli/blob/master/doc/commands/package.md#stat) - provide ABAP package information (aka libc stat)
-- [abap\_package\_create](https://github.com/jfilak/sapcli/blob/master/doc/commands/package.md#create) - provide ABAP package information (aka libc stat)
+- [abap\_package\_create](https://github.com/jfilak/sapcli/blob/master/doc/commands/package.md#create) - create ABAP package
 
 - [abap\_program\_create](https://github.com/jfilak/sapcli/blob/master/doc/commands/program.md#create) - create ABAP Program
-- [abap\_program\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/program.md#read) - return code of ABAP Program
+- [abap\_program\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/program.md#read) - read source code of ABAP Program
+- [abap\_program\_write](https://github.com/jfilak/sapcli/blob/master/doc/commands/program.md#write) - write source code of ABAP Program
 - [abap\_program\_activate](https://github.com/jfilak/sapcli/blob/master/doc/commands/program.md#activate) - activate ABAP Program
 
-- [abap\_class\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/class.md#read-1) - return code of ABAP class
-- [abap\_ddl\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/ddl.md#read) - return code of CDS view
+- [abap\_class\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/class.md#read-1) - read source code of ABAP class
+- [abap\_class\_write](https://github.com/jfilak/sapcli/blob/master/doc/commands/class.md#write) - write source code of ABAP class
+- [abap\_include\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/include.md#read) - read source code of ABAP include
+- [abap\_include\_write](https://github.com/jfilak/sapcli/blob/master/doc/commands/include.md#write) - write source code of ABAP include
+- [abap\_interface\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/interface.md#read) - read source code of ABAP interface
+- [abap\_interface\_write](https://github.com/jfilak/sapcli/blob/master/doc/commands/interface.md#write) - write source code of ABAP interface
+- [abap\_ddl\_read](https://github.com/jfilak/sapcli/blob/master/doc/commands/ddl.md#read) - read source code of CDS view
+- [abap\_ddl\_write](https://github.com/jfilak/sapcli/blob/master/doc/commands/ddl.md#write) - write source code of CDS view
 - [abap\_aunit\_run](https://github.com/jfilak/sapcli/blob/master/doc/commands/aunit.md#run) - run AUnits on package, class, program, program-include, transport
 - [abap\_atc\_run](https://github.com/jfilak/sapcli/blob/master/doc/commands/atc.md#run) - run ATC checks for package, class, program
 - [abap\_gcts\_repolist](https://github.com/jfilak/sapcli/blob/master/doc/commands/gcts.md#repolist) - lists gCTS repositories
@@ -144,90 +151,185 @@ python3 src/sapcli-mcp-server.py --experimental
 ### Experimental tools
 
 The following tools are available when the server is started with `--experimental`.
-They have been automatically generated from sapcli commands but have not been
-manually verified yet.
+They have been automatically generated from sapcli commands. Tools marked with
+"sandbox-tested" have been verified by an automated agent on a sandbox system —
+they are functional but not yet fully production-tested.
 
-- abap\_include\_attributes
-- abap\_include\_create
-- abap\_include\_read
-- abap\_include\_activate
-- abap\_interface\_create
-- abap\_interface\_read
-- abap\_interface\_activate
-- abap\_class\_attributes
-- abap\_class\_execute
-- abap\_class\_create
-- abap\_class\_activate
-- abap\_ddl\_create
-- abap\_ddl\_activate
-- abap\_dcl\_create
-- abap\_dcl\_read
-- abap\_dcl\_write
-- abap\_dcl\_activate
-- abap\_bdef\_create
-- abap\_bdef\_read
-- abap\_bdef\_write
-- abap\_bdef\_activate
-- abap\_functiongroup\_create
-- abap\_functiongroup\_read
+#### General
+
+- abap\_abap\_systeminfo — sandbox-tested
+- abap\_abap\_find — sandbox-tested
+- abap\_abap\_run — sandbox-tested (works for short code; complex code may timeout)
+- abap\_datapreview\_osql — sandbox-tested (requires data preview authorization)
+- abap\_activation\_inactiveobjects\_list — sandbox-tested
+- abap\_adt\_collections — sandbox-tested
+
+#### Programs & Includes
+
+- abap\_program\_delete — sandbox-tested
+- abap\_program\_whereused — sandbox-tested
+- abap\_include\_attributes — sandbox-tested
+- abap\_include\_create — sandbox-tested
+- abap\_include\_activate — sandbox-tested
+- abap\_include\_delete — sandbox-tested
+- abap\_include\_whereused — sandbox-tested
+
+#### Classes & Interfaces
+
+- abap\_class\_attributes — sandbox-tested
+- abap\_class\_create — sandbox-tested
+- abap\_class\_activate — sandbox-tested
+- abap\_class\_execute — sandbox-tested (output not captured)
+- abap\_class\_delete — sandbox-tested
+- abap\_class\_whereused — sandbox-tested
+- abap\_interface\_create — sandbox-tested
+- abap\_interface\_activate — sandbox-tested
+- abap\_interface\_delete — sandbox-tested
+- abap\_interface\_whereused — sandbox-tested
+
+#### CDS / DDL / DCL / BDEF
+
+- abap\_ddl\_create — sandbox-tested
+- abap\_ddl\_activate — sandbox-tested
+- abap\_ddl\_delete — sandbox-tested
+- abap\_ddl\_whereused — sandbox-tested
+- abap\_ddl\_apistate\_list — sandbox-tested
+- abap\_ddl\_apistate\_set
+- abap\_dcl\_create — sandbox-tested
+- abap\_dcl\_read — sandbox-tested
+- abap\_dcl\_write — sandbox-tested
+- abap\_dcl\_activate — sandbox-tested
+- abap\_dcl\_delete — sandbox-tested
+- abap\_dcl\_whereused — sandbox-tested
+- abap\_bdef\_create — sandbox-tested
+- abap\_bdef\_read — sandbox-tested
+- abap\_bdef\_write — sandbox-tested
+- abap\_bdef\_activate — sandbox-tested
+- abap\_bdef\_delete — sandbox-tested
+- abap\_bdef\_whereused — sandbox-tested
+
+#### Function Groups & Modules
+
+- abap\_functiongroup\_create — sandbox-tested
+- abap\_functiongroup\_read — sandbox-tested
 - abap\_functiongroup\_write
 - abap\_functiongroup\_activate
+- abap\_functiongroup\_delete — sandbox-tested
+- abap\_functiongroup\_whereused — sandbox-tested
 - abap\_functiongroup\_include\_create
 - abap\_functiongroup\_include\_read
 - abap\_functiongroup\_include\_write
 - abap\_functiongroup\_include\_activate
+- abap\_functiongroup\_include\_delete
+- abap\_functiongroup\_include\_whereused — sandbox-tested
 - abap\_functionmodule\_chattr
-- abap\_functionmodule\_create
-- abap\_functionmodule\_read
-- abap\_functionmodule\_write
-- abap\_functionmodule\_activate
-- abap\_atc\_customizing
-- abap\_atc\_profile\_list
+- abap\_functionmodule\_create — sandbox-tested
+- abap\_functionmodule\_read — sandbox-tested
+- abap\_functionmodule\_write — sandbox-tested
+- abap\_functionmodule\_activate — sandbox-tested
+- abap\_functionmodule\_delete — sandbox-tested
+- abap\_functionmodule\_whereused — sandbox-tested
+
+#### Dictionary Objects
+
+- abap\_table\_create — sandbox-tested
+- abap\_table\_read — sandbox-tested
+- abap\_table\_write — sandbox-tested
+- abap\_table\_activate — sandbox-tested
+- abap\_table\_delete — sandbox-tested
+- abap\_table\_whereused — sandbox-tested
+- abap\_structure\_create — sandbox-tested
+- abap\_structure\_read — sandbox-tested
+- abap\_structure\_write — sandbox-tested
+- abap\_structure\_activate — sandbox-tested
+- abap\_structure\_delete — sandbox-tested
+- abap\_structure\_whereused — sandbox-tested
+- abap\_dataelement\_define
+- abap\_dataelement\_create — sandbox-tested
+- abap\_dataelement\_read — sandbox-tested
+- abap\_dataelement\_write
+- abap\_dataelement\_activate
+- abap\_dataelement\_delete — sandbox-tested
+- abap\_dataelement\_whereused — sandbox-tested
+- abap\_domain\_create — not supported on this system version
+- abap\_domain\_read — sandbox-tested
+- abap\_domain\_write
+- abap\_domain\_activate
+- abap\_domain\_delete — untested (create not supported on sandbox)
+- abap\_domain\_whereused — sandbox-tested
+
+#### Transactions & Authorization Fields
+
+- abap\_transaction\_create — sandbox-tested
+- abap\_transaction\_read — sandbox-tested
+- abap\_transaction\_write
+- abap\_transaction\_activate
+- abap\_transaction\_delete — sandbox-tested
+- abap\_transaction\_whereused — sandbox-tested
+- abap\_authorizationfield\_create — placeholder (raises "not implemented yet")
+- abap\_authorizationfield\_read — sandbox-tested
+- abap\_authorizationfield\_write — placeholder (raises "not implemented yet")
+- abap\_authorizationfield\_activate — sandbox-tested
+- abap\_authorizationfield\_delete — placeholder (raises "not implemented yet")
+- abap\_authorizationfield\_whereused — sandbox-tested
+
+#### Packages
+
+- abap\_package\_check — sandbox-tested
+- abap\_package\_activate — sandbox-tested
+- abap\_package\_delete
+
+#### ATC
+
+- abap\_atc\_customizing — sandbox-tested
+- abap\_atc\_profile\_list — sandbox-tested
 - abap\_atc\_profile\_dump
-- abap\_datapreview\_osql
-- abap\_package\_check
+
+#### CTS (Change & Transport System)
+
 - abap\_cts\_create
 - abap\_cts\_release
 - abap\_cts\_delete
 - abap\_cts\_reassign
-- abap\_cts\_list
+- abap\_cts\_list — sandbox-tested
+
+#### BAdI & Feature Toggles
+
+- abap\_badi — sandbox-tested
+- abap\_badi\_list — sandbox-tested
+- abap\_badi\_set-active
+- abap\_featuretoggle\_state — sandbox-tested
+- abap\_featuretoggle\_on — sandbox-tested (requires transport system)
+- abap\_featuretoggle\_off — sandbox-tested (requires transport system)
+
+#### RAP (RESTful ABAP Programming)
+
+- abap\_rap\_binding\_publish
+- abap\_rap\_definition\_activate
+
+#### Checkout & Checkin
+
 - abap\_checkout\_class
 - abap\_checkout\_program
 - abap\_checkout\_interface
 - abap\_checkout\_function\_group
 - abap\_checkout\_package
-- abap\_activation\_inactiveobjects\_list
-- abap\_adt\_collections
+- abap\_checkin\_package
+
+#### abapGit
+
 - abap\_abapgit\_link
 - abap\_abapgit\_pull
-- abap\_rap\_binding\_publish
-- abap\_rap\_definition\_activate
-- abap\_table\_create
-- abap\_table\_read
-- abap\_table\_write
-- abap\_table\_activate
-- abap\_structure\_create
-- abap\_structure\_read
-- abap\_structure\_write
-- abap\_structure\_activate
-- abap\_dataelement\_define
-- abap\_dataelement\_create
-- abap\_dataelement\_read
-- abap\_dataelement\_write
-- abap\_dataelement\_activate
-- abap\_checkin
-- abap\_badi
-- abap\_badi\_list
-- abap\_badi\_set-active
-- abap\_featuretoggle\_state
-- abap\_featuretoggle\_on
-- abap\_featuretoggle\_off
+
+#### gCTS
+
 - abap\_gcts\_clone
-- abap\_gcts\_config
+- abap\_gcts\_config — sandbox-tested
 - abap\_gcts\_delete
 - abap\_gcts\_checkout
-- abap\_gcts\_log
+- abap\_gcts\_log — sandbox-tested
 - abap\_gcts\_pull
+- abap\_gcts\_push
 - abap\_gcts\_commit
 - abap\_gcts\_user\_get-credentials
 - abap\_gcts\_user\_set-credentials
@@ -235,23 +337,30 @@ manually verified yet.
 - abap\_gcts\_repo\_set-url
 - abap\_gcts\_repo\_set-role-target
 - abap\_gcts\_repo\_set-role-source
-- abap\_gcts\_repo\_activities
-- abap\_gcts\_repo\_messages
-- abap\_gcts\_repo\_objects
-- abap\_gcts\_repo\_property\_get
+- abap\_gcts\_repo\_activities — sandbox-tested
+- abap\_gcts\_repo\_messages — sandbox-tested
+- abap\_gcts\_repo\_objects — sandbox-tested
+- abap\_gcts\_repo\_tasks — bug (crashes on empty task list, sapcli upstream)
+- abap\_gcts\_repo\_property\_get — sandbox-tested
 - abap\_gcts\_repo\_property\_set
 - abap\_gcts\_repo\_branch\_create
 - abap\_gcts\_repo\_branch\_delete
-- abap\_gcts\_repo\_branch\_list
+- abap\_gcts\_repo\_branch\_list — sandbox-tested
 - abap\_gcts\_repo\_branch\_update\_filesystem
-- abap\_gcts\_system\_config\_get
+- abap\_gcts\_system\_config\_get — bug (KeyError 'value' in sapcli)
 - abap\_gcts\_system\_config\_list
 - abap\_gcts\_system\_config\_set
 - abap\_gcts\_system\_config\_unset
 - abap\_gcts\_task\_info
 - abap\_gcts\_task\_list
 - abap\_gcts\_task\_delete
+
+#### RFC Tools (require PyRFC + NWRFC SDK)
+
 - abap\_startrfc
+- abap\_user\_details
+- abap\_user\_create
+- abap\_user\_change
 - abap\_strust\_list
 - abap\_strust\_createpse
 - abap\_strust\_createidentity
@@ -263,10 +372,30 @@ manually verified yet.
 - abap\_strust\_getowncert
 - abap\_strust\_listcertificates
 - abap\_strust\_dumpcertificates
-- abap\_user\_details
-- abap\_user\_create
-- abap\_user\_change
+
+#### BSP & FLP
+
 - abap\_bsp\_upload
 - abap\_bsp\_stat
 - abap\_bsp\_delete
 - abap\_flp\_init
+
+#### Server Configuration
+
+> **Note:** These tools manage the local sapcli config file and do not require a
+> SAP connection. Currently broken — the server incorrectly requires a connection
+> type for these commands.
+
+- abap\_config\_view
+- abap\_config\_current-context
+- abap\_config\_merge
+- abap\_config\_set-connection
+- abap\_config\_set-context
+- abap\_config\_set-user
+- abap\_config\_get-connections
+- abap\_config\_get-contexts
+- abap\_config\_get-users
+- abap\_config\_use-context
+- abap\_config\_delete-connection
+- abap\_config\_delete-context
+- abap\_config\_delete-user
