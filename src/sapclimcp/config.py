@@ -343,7 +343,7 @@ class ConnectionManager:
             Dict with 'auth_type', 'host', 'system_name'.
         """
         sys_config = self._resolve_system(system_name)
-        resolved_name = system_name or self._config.default_system
+        resolved_name = system_name or self._config.default_system or 'unknown'
         return {
             'auth_type': sys_config.auth,
             'host': sys_config.ashost,

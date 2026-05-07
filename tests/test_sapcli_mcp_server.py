@@ -918,8 +918,12 @@ class TestActionableErrorMessages:
 
         sct = TestRetryOnAuthFailure._make_tool_with_manager(tool_fn, mock_manager)
 
-        with pytest.raises(mcptools.SapcliCommandToolError) as exc_info:
-            await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+        with patch('sapclimcp.mcptools._LOGGER') as mock_logger:
+            with pytest.raises(mcptools.SapcliCommandToolError) as exc_info:
+                await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+
+            # Full traceback logged server-side for debugging
+            mock_logger.exception.assert_called_once()
 
         msg = str(exc_info.value)
         assert "Unexpected error" in msg
