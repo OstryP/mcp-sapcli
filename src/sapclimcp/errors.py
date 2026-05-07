@@ -90,3 +90,37 @@ def format_command_error(tool_name: str, original_error: Exception) -> str:
         original_error: The original SAPCliError.
     """
     return f"Tool '{tool_name}' failed: {original_error}"
+
+
+def format_startup_error(error: Exception) -> str:
+    """Format a startup failure into a user-friendly message.
+
+    Args:
+        error: The exception that caused the startup failure.
+
+    Returns:
+        Formatted error message suitable for stderr output.
+    """
+    # Import here to avoid circular dependency (ConfigError is in config.py)
+    from sapclimcp.config import ConfigError
+
+    if isinstance(error, ConfigError):
+        return (
+            f"Server startup failed: configuration error.\n"
+            f"{error}\n"
+            f"Action: check your config file path and contents."
+        )
+
+    if isinstance(error, ImportError):
+        return (
+            f"Server startup failed: missing dependency.\n"
+            f"{error}\n"
+            f"Action: ensure all dependencies are installed "
+            f"(pip install -e . or uv pip install -e .)."
+        )
+
+    return (
+        f"Server startup failed: unexpected error.\n"
+        f"{type(error).__name__}: {error}\n"
+        f"Action: this is likely a bug — please report it."
+    )

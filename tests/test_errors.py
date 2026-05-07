@@ -6,6 +6,7 @@ from sapclimcp.errors import (
     format_auth_error,
     format_connection_error,
     format_command_error,
+    format_startup_error,
 )
 
 
@@ -160,3 +161,30 @@ class TestFormatCommandError:
         err = Exception("Object not found")
         msg = format_command_error(tool_name='abap_class_read', original_error=err)
         assert "Object not found" in msg
+
+
+class TestFormatStartupError:
+    """Tests for format_startup_error."""
+
+    def test_config_error(self):
+        from sapclimcp.config import ConfigError
+        err = ConfigError("Missing 'systems' key")
+        msg = format_startup_error(err)
+        assert "configuration error" in msg
+        assert "Missing 'systems' key" in msg
+        assert "config file" in msg
+
+    def test_import_error(self):
+        err = ImportError("No module named 'sap'")
+        msg = format_startup_error(err)
+        assert "missing dependency" in msg
+        assert "No module named 'sap'" in msg
+        assert "install" in msg
+
+    def test_generic_error(self):
+        err = RuntimeError("something broke")
+        msg = format_startup_error(err)
+        assert "unexpected error" in msg
+        assert "RuntimeError" in msg
+        assert "something broke" in msg
+        assert "bug" in msg
