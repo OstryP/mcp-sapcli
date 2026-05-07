@@ -34,3 +34,7 @@ packages = ["src/sapclimcp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "e2e: End-to-end tests requiring a live SAP system",
+]
