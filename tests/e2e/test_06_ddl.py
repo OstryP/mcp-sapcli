@@ -3,10 +3,9 @@
 import pytest
 import pytest_asyncio
 
-from .helpers import call_tool_ok, safe_delete
+from .helpers import call_tool_ok, call_tool_check, safe_delete
 
 
-@pytest.mark.asyncio
 class TestDDLLifecycle:
     """Full CRUD lifecycle for a CDS view (DDL source)."""
 
@@ -19,11 +18,10 @@ class TestDDLLifecycle:
         TestDDLLifecycle._failed = False
 
     @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
-    async def cleanup(self, mcp_client, system_name, run_id):
+    async def cleanup(self, mcp_client, system_name):
         yield
-        name = f"ZE2E_DDL_{run_id}"
         await safe_delete(mcp_client, "abap_ddl_delete", {
-            "name": [name],
+            "name": [self.__class__._ddl_name],
             "system": system_name,
         })
 
@@ -47,11 +45,13 @@ class TestDDLLifecycle:
 
     async def test_02_write(self, mcp_client, system_name):
         """Write CDS view source."""
+        # SQL view name: max 16 chars — use [:15] + "V" to guarantee safety
+        sql_view_name = self._ddl_name[:15] + "V"
         source = (
-            f"@AbapCatalog.sqlViewName: '{self._ddl_name[:16]}V'\n"
+            f"@AbapCatalog.sqlViewName: '{sql_view_name}'\n"
             "@AbapCatalog.compiler.compareFilter: true\n"
             "@AccessControl.authorizationCheck: #NOT_REQUIRED\n"
-            f"@EndUserText.label: 'E2E test view'\n"
+            "@EndUserText.label: 'E2E test view'\n"
             f"define view {self._ddl_name} as select from t000 {{\n"
             "  key mandt\n"
             "}}\n"
@@ -91,8 +91,13 @@ class TestDDLLifecycle:
             raise
 
     async def test_05_delete(self, mcp_client, system_name):
-        """Delete the CDS view."""
+        """Delete the CDS view and verify it's gone."""
         await call_tool_ok(mcp_client, "abap_ddl_delete", {
             "name": [self._ddl_name],
             "system": system_name,
         })
+        success, _, _ = await call_tool_check(mcp_client, "abap_ddl_read", {
+            "name": self._ddl_name,
+            "system": system_name,
+        })
+        assert not success, "DDL should not exist after deletion"

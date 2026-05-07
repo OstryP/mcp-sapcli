@@ -3,10 +3,9 @@
 import pytest
 import pytest_asyncio
 
-from .helpers import call_tool_ok, safe_delete
+from .helpers import call_tool_ok, call_tool_check, safe_delete
 
 
-@pytest.mark.asyncio
 class TestStructureLifecycle:
     """Full CRUD lifecycle for a dictionary structure."""
 
@@ -19,11 +18,10 @@ class TestStructureLifecycle:
         TestStructureLifecycle._failed = False
 
     @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
-    async def cleanup(self, mcp_client, system_name, run_id):
+    async def cleanup(self, mcp_client, system_name):
         yield
-        name = f"ZE2E_STRC_{run_id}"
         await safe_delete(mcp_client, "abap_structure_delete", {
-            "name": [name],
+            "name": [self.__class__._struc_name],
             "system": system_name,
         })
 
@@ -48,7 +46,7 @@ class TestStructureLifecycle:
     async def test_02_write(self, mcp_client, system_name):
         """Write structure definition."""
         source = (
-            f"@EndUserText.label : 'E2E test structure'\n"
+            "@EndUserText.label : 'E2E test structure'\n"
             "@AbapCatalog.enhancement.category : #NOT_EXTENSIBLE\n"
             f"define structure {self._struc_name.lower()} {{\n"
             "  id   : sysuuid_x16;\n"
@@ -90,8 +88,13 @@ class TestStructureLifecycle:
             raise
 
     async def test_05_delete(self, mcp_client, system_name):
-        """Delete the structure."""
+        """Delete the structure and verify it's gone."""
         await call_tool_ok(mcp_client, "abap_structure_delete", {
             "name": [self._struc_name],
             "system": system_name,
         })
+        success, _, _ = await call_tool_check(mcp_client, "abap_structure_read", {
+            "name": self._struc_name,
+            "system": system_name,
+        })
+        assert not success, "Structure should not exist after deletion"

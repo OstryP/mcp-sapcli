@@ -5,7 +5,6 @@ import pytest
 from .helpers import call_tool_ok
 
 
-@pytest.mark.asyncio
 class TestPackageLifecycle:
     """Verify the test package exists and is usable."""
 
@@ -17,8 +16,7 @@ class TestPackageLifecycle:
                 "system": system_name,
             }
         )
-        # If we're using $TMP (fallback), just verify it responded
-        assert content is not None
+        assert isinstance(content, str)
 
     async def test_02_package_listable(self, mcp_client, system_name, package_name):
         """Verify the package can be listed."""
@@ -28,4 +26,4 @@ class TestPackageLifecycle:
                 "system": system_name,
             }
         )
-        assert content is not None
+        assert isinstance(content, str)

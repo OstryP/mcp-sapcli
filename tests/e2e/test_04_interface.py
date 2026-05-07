@@ -3,10 +3,9 @@
 import pytest
 import pytest_asyncio
 
-from .helpers import call_tool_ok, safe_delete
+from .helpers import call_tool_ok, call_tool_check, safe_delete
 
 
-@pytest.mark.asyncio
 class TestInterfaceLifecycle:
     """Full CRUD lifecycle for an ABAP interface."""
 
@@ -19,11 +18,10 @@ class TestInterfaceLifecycle:
         TestInterfaceLifecycle._failed = False
 
     @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
-    async def cleanup(self, mcp_client, system_name, run_id):
+    async def cleanup(self, mcp_client, system_name):
         yield
-        name = f"ZIF_E2E_{run_id}"
         await safe_delete(mcp_client, "abap_interface_delete", {
-            "name": [name],
+            "name": [self.__class__._intf_name],
             "system": system_name,
         })
 
@@ -50,7 +48,7 @@ class TestInterfaceLifecycle:
         source = (
             f"INTERFACE {self._intf_name.lower()} PUBLIC.\n"
             "  METHODS get_id RETURNING VALUE(rv_id) TYPE string.\n"
-            f"ENDINTERFACE.\n"
+            "ENDINTERFACE.\n"
         )
         try:
             await call_tool_ok(mcp_client, "abap_interface_write", {
@@ -87,8 +85,13 @@ class TestInterfaceLifecycle:
             raise
 
     async def test_05_delete(self, mcp_client, system_name):
-        """Delete the interface."""
+        """Delete the interface and verify it's gone."""
         await call_tool_ok(mcp_client, "abap_interface_delete", {
             "name": [self._intf_name],
             "system": system_name,
         })
+        success, _, _ = await call_tool_check(mcp_client, "abap_interface_read", {
+            "name": self._intf_name,
+            "system": system_name,
+        })
+        assert not success, "Interface should not exist after deletion"

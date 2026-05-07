@@ -10,20 +10,42 @@ Required environment variables:
 
 Optional:
     E2E_SAP_SSL      - Use SSL (true/false, default true)
-    E2E_SAP_VERIFY   - Verify SSL cert (true/false, default false)
+    E2E_SAP_VERIFY   - Verify SSL cert (true/false, default false for sandbox
+                       systems with self-signed certificates)
     E2E_SAP_SYSTEM   - System name in config (default: "E2E")
+
+Credentials target a sandbox system with limited authorizations.
+SSL verification is disabled by default for internal sandboxes with
+self-signed certificates.
 """
 
 import json
 import logging
 import os
-import time
+import secrets
 
 import pytest
 import pytest_asyncio
 from fastmcp import Client
 
 logger = logging.getLogger("e2e")
+
+# ─── pytest configuration (E2E-only) ────────────────────────────────────────
+
+
+def pytest_configure(config):
+    """Set asyncio loop scope to session for E2E tests only."""
+    config.inicfg["asyncio_default_fixture_loop_scope"] = "session"
+    config.inicfg["asyncio_default_test_loop_scope"] = "session"
+
+
+def pytest_collection_modifyitems(items):
+    """Apply 'e2e' marker to all tests in this directory."""
+    e2e_marker = pytest.mark.e2e
+    for item in items:
+        if "/e2e/" in item.nodeid or "\\e2e\\" in item.nodeid:
+            item.add_marker(e2e_marker)
+
 
 # ─── Skip guard ─────────────────────────────────────────────────────────────
 
@@ -48,8 +70,8 @@ def _check_env():
 # ─── Run ID ─────────────────────────────────────────────────────────────────
 
 def _generate_run_id() -> str:
-    """Generate a short unique ID for this test run (4 hex chars from timestamp)."""
-    return format(int(time.time()) % 0xFFFF, "04X")
+    """Generate a short unique ID for this test run (4 random hex chars)."""
+    return secrets.token_hex(2).upper()
 
 
 # ─── Config file creation ───────────────────────────────────────────────────
@@ -75,6 +97,7 @@ def _create_config_file(tmp_dir: str) -> str:
     path = os.path.join(tmp_dir, "e2e-config.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump(config, f)
+    os.chmod(path, 0o600)
     return path
 
 

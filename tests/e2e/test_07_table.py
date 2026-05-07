@@ -3,10 +3,9 @@
 import pytest
 import pytest_asyncio
 
-from .helpers import call_tool_ok, safe_delete
+from .helpers import call_tool_ok, call_tool_check, safe_delete
 
 
-@pytest.mark.asyncio
 class TestTableLifecycle:
     """Full CRUD lifecycle for a database table."""
 
@@ -19,11 +18,10 @@ class TestTableLifecycle:
         TestTableLifecycle._failed = False
 
     @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
-    async def cleanup(self, mcp_client, system_name, run_id):
+    async def cleanup(self, mcp_client, system_name):
         yield
-        name = f"ZE2E_TAB_{run_id}"
         await safe_delete(mcp_client, "abap_table_delete", {
-            "name": [name],
+            "name": [self.__class__._table_name],
             "system": system_name,
         })
 
@@ -48,7 +46,7 @@ class TestTableLifecycle:
     async def test_02_write(self, mcp_client, system_name):
         """Write table definition."""
         source = (
-            f"@EndUserText.label : 'E2E test table'\n"
+            "@EndUserText.label : 'E2E test table'\n"
             "@AbapCatalog.enhancement.category : #NOT_EXTENSIBLE\n"
             "@AbapCatalog.tableCategory : #TRANSPARENT\n"
             "@AbapCatalog.deliveryClass : #L\n"
@@ -87,14 +85,19 @@ class TestTableLifecycle:
                 "name": self._table_name,
                 "system": system_name,
             })
-            assert "mandt" in content.lower() or "MANDT" in content
+            assert "mandt" in content.lower()
         except Exception:
             self.__class__._failed = True
             raise
 
     async def test_05_delete(self, mcp_client, system_name):
-        """Delete the table."""
+        """Delete the table and verify it's gone."""
         await call_tool_ok(mcp_client, "abap_table_delete", {
             "name": [self._table_name],
             "system": system_name,
         })
+        success, _, _ = await call_tool_check(mcp_client, "abap_table_read", {
+            "name": self._table_name,
+            "system": system_name,
+        })
+        assert not success, "Table should not exist after deletion"

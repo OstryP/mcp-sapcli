@@ -5,27 +5,41 @@ import pytest
 from .helpers import call_tool_ok, call_tool_check
 
 
-@pytest.mark.asyncio
 class TestConnectivity:
     """Verify basic connectivity to the SAP sandbox."""
 
+    _failed: bool = False
+
+    @pytest.fixture(autouse=True)
+    def skip_if_prior_failed(self):
+        if self.__class__._failed:
+            pytest.skip("prior connectivity check failed")
+
     async def test_01_system_info(self, mcp_client, system_name):
         """Verify system is reachable via abap_abap_systeminfo."""
-        content = await call_tool_ok(
-            mcp_client, "abap_abap_systeminfo", {"system": system_name}
-        )
-        assert content  # Non-empty response means connected
+        try:
+            content = await call_tool_ok(
+                mcp_client, "abap_abap_systeminfo", {"system": system_name}
+            )
+            assert "SID" in content
+        except Exception:
+            self.__class__._failed = True
+            raise
 
     async def test_02_package_list_tmp(self, mcp_client, system_name):
         """Verify $TMP is listable (basic ADT connectivity check)."""
-        content = await call_tool_ok(
-            mcp_client, "abap_package_list", {
-                "name": "$TMP",
-                "system": system_name,
-            }
-        )
-        # $TMP always exists — content may be empty but call must succeed
-        assert content is not None
+        try:
+            content = await call_tool_ok(
+                mcp_client, "abap_package_list", {
+                    "name": "$TMP",
+                    "system": system_name,
+                }
+            )
+            # $TMP always exists — call_tool_ok guarantees success
+            assert isinstance(content, str)
+        except Exception:
+            self.__class__._failed = True
+            raise
 
     async def test_03_gcts_repolist(self, mcp_client, system_name):
         """Verify gCTS connectivity (different conn_type than ADT)."""
@@ -34,5 +48,4 @@ class TestConnectivity:
         )
         if not success:
             pytest.skip(f"gCTS not available on this system: {log_msgs}")
-        # gCTS repolist returns repo data (may be empty list on fresh system)
-        assert content is not None
+        assert isinstance(content, str)

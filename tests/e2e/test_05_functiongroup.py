@@ -3,10 +3,9 @@
 import pytest
 import pytest_asyncio
 
-from .helpers import call_tool_ok, safe_delete
+from .helpers import call_tool_ok, call_tool_check, safe_delete
 
 
-@pytest.mark.asyncio
 class TestFunctionGroupLifecycle:
     """Full lifecycle for a function group and function module."""
 
@@ -21,12 +20,11 @@ class TestFunctionGroupLifecycle:
         TestFunctionGroupLifecycle._failed = False
 
     @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
-    async def cleanup(self, mcp_client, system_name, run_id):
+    async def cleanup(self, mcp_client, system_name):
         yield
         # Deleting the function group cascades to the FM
-        fg_name = f"ZE2E_FG_{run_id}"
         await safe_delete(mcp_client, "abap_functiongroup_delete", {
-            "name": [fg_name],
+            "name": [self.__class__._fg_name],
             "system": system_name,
         })
 
@@ -66,7 +64,7 @@ class TestFunctionGroupLifecycle:
         source = (
             f"FUNCTION {self._fm_name.lower()}.\n"
             "  \" E2E test function module — no parameters\n"
-            f"ENDFUNCTION.\n"
+            "ENDFUNCTION.\n"
         )
         try:
             await call_tool_ok(mcp_client, "abap_functionmodule_write", {
@@ -112,14 +110,19 @@ class TestFunctionGroupLifecycle:
                 "name": self._fg_name,
                 "system": system_name,
             })
-            assert content is not None
+            assert isinstance(content, str)
         except Exception:
             self.__class__._failed = True
             raise
 
     async def test_07_delete_group(self, mcp_client, system_name):
-        """Delete the function group (cascading delete of FM)."""
+        """Delete the function group (cascading delete of FM) and verify."""
         await call_tool_ok(mcp_client, "abap_functiongroup_delete", {
             "name": [self._fg_name],
             "system": system_name,
         })
+        success, _, _ = await call_tool_check(mcp_client, "abap_functiongroup_read", {
+            "name": self._fg_name,
+            "system": system_name,
+        })
+        assert not success, "Function group should not exist after deletion"

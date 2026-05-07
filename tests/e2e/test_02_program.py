@@ -3,10 +3,9 @@
 import pytest
 import pytest_asyncio
 
-from .helpers import call_tool_ok, safe_delete
+from .helpers import call_tool_ok, call_tool_check, safe_delete
 
 
-@pytest.mark.asyncio
 class TestProgramLifecycle:
     """Full CRUD lifecycle for an ABAP program."""
 
@@ -23,9 +22,8 @@ class TestProgramLifecycle:
     async def cleanup(self, mcp_client, system_name, run_id):
         """Ensure program is deleted after all tests in this class."""
         yield
-        name = f"ZE2E_PROG_{run_id}"
         await safe_delete(mcp_client, "abap_program_delete", {
-            "name": [name],
+            "name": [self.__class__._prog_name],
             "system": system_name,
         })
 
@@ -117,8 +115,13 @@ class TestProgramLifecycle:
             raise
 
     async def test_06_delete(self, mcp_client, system_name):
-        """Delete the program (verifies delete tool works)."""
+        """Delete the program and verify it's gone."""
         await call_tool_ok(mcp_client, "abap_program_delete", {
             "name": [self._prog_name],
             "system": system_name,
         })
+        success, _, _ = await call_tool_check(mcp_client, "abap_program_read", {
+            "name": self._prog_name,
+            "system": system_name,
+        })
+        assert not success, "Program should not exist after deletion"

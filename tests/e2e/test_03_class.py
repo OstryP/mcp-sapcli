@@ -6,7 +6,6 @@ import pytest_asyncio
 from .helpers import call_tool_ok, call_tool_check, safe_delete
 
 
-@pytest.mark.asyncio
 class TestClassLifecycle:
     """Full CRUD lifecycle for an ABAP class with AUnit."""
 
@@ -20,12 +19,11 @@ class TestClassLifecycle:
         TestClassLifecycle._failed = False
 
     @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
-    async def cleanup(self, mcp_client, system_name, run_id):
+    async def cleanup(self, mcp_client, system_name):
         """Delete class after tests."""
         yield
-        name = f"ZCL_E2E_{run_id}"
         await safe_delete(mcp_client, "abap_class_delete", {
-            "name": [name],
+            "name": [self.__class__._class_name],
             "system": system_name,
         })
 
@@ -167,16 +165,21 @@ class TestClassLifecycle:
                 "name": self._class_name,
                 "system": system_name,
             })
-            # Expect success indicator
-            lower = content.lower()
-            assert "successful" in lower or "ok" in lower or "0 error" in lower
+            # AUnit output contains "Successful: N" where N > 0
+            assert "Successful:" in content
+            # Extract the count and verify it's > 0
+            for line in content.splitlines():
+                if "Successful:" in line:
+                    count = int(line.split("Successful:")[1].strip())
+                    assert count > 0, f"Expected passing tests, got Successful: {count}"
+                    break
         except Exception:
             self.__class__._failed = True
             raise
 
     async def test_09_run_atc(self, mcp_client, system_name):
         """Run ATC checks (non-fatal — may not be configured on sandbox)."""
-        success, log_msgs, content = await call_tool_check(
+        success, log_msgs, _ = await call_tool_check(
             mcp_client, "abap_atc_run", {
                 "type": "class",
                 "name": self._class_name,
@@ -187,8 +190,14 @@ class TestClassLifecycle:
             pytest.skip(f"ATC not configured on this system: {log_msgs}")
 
     async def test_10_delete(self, mcp_client, system_name):
-        """Delete the class (verifies delete tool works)."""
+        """Delete the class and verify it's gone."""
         await call_tool_ok(mcp_client, "abap_class_delete", {
             "name": [self._class_name],
             "system": system_name,
         })
+        success, _, _ = await call_tool_check(mcp_client, "abap_class_read", {
+            "name": self._class_name,
+            "type": "main",
+            "system": system_name,
+        })
+        assert not success, "Class should not exist after deletion"
