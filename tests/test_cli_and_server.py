@@ -144,4 +144,31 @@ class TestCliMain:
         with pytest.raises(SystemExit) as exc_info:
             main(["--stdio", "--config", "bad.json"])
 
-        assert "Configuration error" in str(exc_info.value)
+        msg = str(exc_info.value)
+        assert "configuration error" in msg
+        assert "bad config" in msg
+
+    @patch('sapclimcp.cli.create_mcp_server')
+    def test_main_exits_on_unexpected_error(self, mock_create):
+        """Unexpected exceptions produce actionable error instead of traceback."""
+        mock_create.side_effect = RuntimeError("something broke")
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--stdio"])
+
+        msg = str(exc_info.value)
+        assert "unexpected error" in msg
+        assert "RuntimeError" in msg
+        assert "something broke" in msg
+
+    @patch('sapclimcp.cli.create_mcp_server')
+    def test_main_exits_on_import_error(self, mock_create):
+        """ImportError produces guidance about installing dependencies."""
+        mock_create.side_effect = ImportError("No module named 'sap'")
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--stdio"])
+
+        msg = str(exc_info.value)
+        assert "missing dependency" in msg
+        assert "install" in msg

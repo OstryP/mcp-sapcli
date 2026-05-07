@@ -333,6 +333,23 @@ class ConnectionManager:
         args = self._make_gcts_connection_args(sys_config)
         return sap.cli.gcts_connection_from_args(args)
 
+    def get_auth_context(self, system_name: Optional[str]) -> dict[str, str]:
+        """Return auth metadata for error message formatting.
+
+        Args:
+            system_name: System name or None for default.
+
+        Returns:
+            Dict with 'auth_type', 'host', 'system_name'.
+        """
+        sys_config = self._resolve_system(system_name)
+        resolved_name = system_name or self._config.default_system or 'unknown'
+        return {
+            'auth_type': sys_config.auth,
+            'host': sys_config.ashost,
+            'system_name': resolved_name,
+        }
+
     def evict(
         self,
         system_name: Optional[str],

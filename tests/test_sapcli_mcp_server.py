@@ -133,7 +133,9 @@ class TestRunAdtCommand:
 
         result = mcptools._run_adt_command(config, mock_command)
         assert result.Success is False
-        assert ['Could not connect to ADT Server', 'Connection failed'] == result.LogMessages
+        assert any('ADT' in m for m in result.LogMessages)
+        assert any('test.sap.example.com' in m for m in result.LogMessages)
+        assert any('Connection failed' in m for m in result.LogMessages)
         assert result.Contents == ""
 
 
@@ -686,6 +688,9 @@ class TestRetryOnAuthFailure:
         """Both attempts raise 401 — error reported to caller."""
         mock_manager = MagicMock()
         mock_manager.get_connection.return_value = MagicMock()
+        mock_manager.get_auth_context.return_value = {
+            'auth_type': 'cookie', 'host': 'dev.sap.example.com', 'system_name': 'DEV',
+        }
 
         def tool_fn(conn, args):
             raise _make_unauthorized_error()
@@ -714,7 +719,7 @@ class TestRetryOnAuthFailure:
         cmd_tool = apt.tools['tester_read']
         sct = mcptools.SapcliCommandTool.from_argparser_tool(cmd_tool)
 
-        with pytest.raises(mcptools.SapcliCommandToolError, match='401'):
+        with pytest.raises(mcptools.SapcliCommandToolError, match='Authentication failed'):
             await sct.run({
                 'ashost': 'test', 'client': '100',
                 'user': 'u', 'password': 'p',
@@ -812,3 +817,117 @@ class TestRetryOnAuthFailure:
         assert contents == "gcts ok\n"
         assert call_count[0] == 2
         mock_manager.evict.assert_called_once_with('DEV', 'gcts')
+
+
+# ---------------------------------------------------------------------------
+# Actionable error messages
+# ---------------------------------------------------------------------------
+
+
+class TestActionableErrorMessages:
+    """Tests that error messages contain actionable guidance."""
+
+    @pytest.mark.asyncio
+    async def test_cookie_auth_failure_mentions_sso_cookie(self):
+        """Cookie auth failure message tells user to refresh SSO cookie."""
+        mock_manager = MagicMock()
+        mock_manager.get_connection.return_value = MagicMock()
+        mock_manager.get_auth_context.return_value = {
+            'auth_type': 'cookie',
+            'host': 'dev.sap.example.com',
+            'system_name': 'DEV',
+        }
+
+        def tool_fn(conn, args):
+            raise _make_unauthorized_error()
+
+        sct = TestRetryOnAuthFailure._make_tool_with_manager(tool_fn, mock_manager)
+
+        with pytest.raises(mcptools.SapcliCommandToolError) as exc_info:
+            await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+
+        msg = str(exc_info.value)
+        assert "SSO cookie" in msg
+        assert "DEV" in msg
+        assert "dev.sap.example.com" in msg
+
+    @pytest.mark.asyncio
+    async def test_basic_auth_failure_mentions_credentials(self):
+        """Basic auth failure message tells user to check user/password."""
+        mock_manager = MagicMock()
+        mock_manager.get_connection.return_value = MagicMock()
+        mock_manager.get_auth_context.return_value = {
+            'auth_type': 'basic',
+            'host': 'qas.sap.example.com',
+            'system_name': 'QAS',
+        }
+
+        def tool_fn(conn, args):
+            raise _make_unauthorized_error()
+
+        sct = TestRetryOnAuthFailure._make_tool_with_manager(tool_fn, mock_manager)
+
+        with pytest.raises(mcptools.SapcliCommandToolError) as exc_info:
+            await sct.run({'name': 'TEST_OBJ', 'system': 'QAS'})
+
+        msg = str(exc_info.value)
+        assert "user" in msg
+        assert "password" in msg
+        assert "QAS" in msg
+
+    @pytest.mark.asyncio
+    @patch('sap.cli.adt_connection_from_args')
+    async def test_connection_error_includes_host_info(self, mock_adt_factory):
+        """Connection failure message includes host and port."""
+        mock_adt_factory.side_effect = SAPCliError("Connection refused")
+
+        apt = ArgParserTool('tester', None, conn_factory=sap.cli.adt_connection_from_args, conn_type='adt')
+        apt.add_properties(mcptools.COMMON_CONNECTION_PARAMS)
+        apt.add_properties(mcptools.ADT_CONNECTION_PARAMS)
+        tool = apt.add_parser('read')
+        tool.add_argument('name')
+        tool.set_defaults(execute=MagicMock())
+
+        cmd_tool = apt.tools['tester_read']
+        sct = mcptools.SapcliCommandTool.from_argparser_tool(cmd_tool)
+
+        result = await sct.run({
+            'ashost': 'myhost.sap.com', 'client': '100',
+            'user': 'u', 'password': 'p',
+            'port': 44300, 'ssl': True, 'verify': False,
+            'name': 'TEST_OBJ',
+        })
+
+        success, log_messages, contents = result.structured_content['result']
+        assert success is False
+        assert any("myhost.sap.com:44300" in m for m in log_messages)
+        assert any("ADT" in m for m in log_messages)
+
+    @pytest.mark.asyncio
+    async def test_unexpected_exception_caught_as_bug(self):
+        """Unexpected exceptions are caught and reported as likely bugs."""
+        mock_manager = MagicMock()
+        mock_manager.get_connection.return_value = MagicMock()
+        mock_manager.get_connection_params.return_value = {
+            'client': '100', 'user': 'admin', 'ashost': 'h',
+            'port': 443, 'ssl': True, 'verify': False,
+        }
+
+        def tool_fn(conn, args):
+            raise RuntimeError("something completely unexpected")
+
+        sct = TestRetryOnAuthFailure._make_tool_with_manager(tool_fn, mock_manager)
+
+        with patch('sapclimcp.mcptools._LOGGER') as mock_logger:
+            with pytest.raises(mcptools.SapcliCommandToolError) as exc_info:
+                await sct.run({'name': 'TEST_OBJ', 'system': 'DEV'})
+
+            # Full traceback logged server-side for debugging
+            mock_logger.exception.assert_called_once()
+
+        msg = str(exc_info.value)
+        assert "Unexpected error" in msg
+        assert "RuntimeError" in msg
+        assert "bug" in msg
+        # str(ex) should NOT be included (could leak credentials)
+        assert "something completely unexpected" not in msg
