@@ -159,20 +159,17 @@ class TestClassLifecycle:
 
     async def test_08_run_aunit(self, mcp_client, system_name):
         """Run AUnit tests on the class."""
+        import re
         try:
             content = await call_tool_ok(mcp_client, "abap_aunit_run", {
                 "type": "class",
                 "name": self._class_name,
                 "system": system_name,
             })
-            # AUnit output contains "Successful: N" where N > 0
-            assert "Successful:" in content
-            # Extract the count and verify it's > 0
-            for line in content.splitlines():
-                if "Successful:" in line:
-                    count = int(line.split("Successful:")[1].strip())
-                    assert count > 0, f"Expected passing tests, got Successful: {count}"
-                    break
+            match = re.search(r"Successful:\s*(\d+)", content)
+            assert match, f"AUnit output missing 'Successful: N': {content[:300]}"
+            count = int(match.group(1))
+            assert count > 0, f"Expected passing tests, got Successful: {count}"
         except Exception:
             self.__class__._failed = True
             raise

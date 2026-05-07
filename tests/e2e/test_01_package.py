@@ -16,7 +16,7 @@ class TestPackageLifecycle:
                 "system": system_name,
             }
         )
-        assert isinstance(content, str)
+        assert content  # non-empty response
 
     async def test_02_package_listable(self, mcp_client, system_name, package_name):
         """Verify the package can be listed."""
@@ -26,4 +26,4 @@ class TestPackageLifecycle:
                 "system": system_name,
             }
         )
-        assert isinstance(content, str)
+        assert content  # non-empty response

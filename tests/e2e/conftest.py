@@ -33,12 +33,6 @@ logger = logging.getLogger("e2e")
 # ─── pytest configuration (E2E-only) ────────────────────────────────────────
 
 
-def pytest_configure(config):
-    """Set asyncio loop scope to session for E2E tests only."""
-    config.inicfg["asyncio_default_fixture_loop_scope"] = "session"
-    config.inicfg["asyncio_default_test_loop_scope"] = "session"
-
-
 def pytest_collection_modifyitems(items):
     """Apply 'e2e' marker to all tests in this directory."""
     e2e_marker = pytest.mark.e2e

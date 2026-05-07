@@ -36,7 +36,7 @@ class TestConnectivity:
                 }
             )
             # $TMP always exists — call_tool_ok guarantees success
-            assert isinstance(content, str)
+            assert content  # non-empty response
         except Exception:
             self.__class__._failed = True
             raise
@@ -48,4 +48,4 @@ class TestConnectivity:
         )
         if not success:
             pytest.skip(f"gCTS not available on this system: {log_msgs}")
-        assert isinstance(content, str)
+        assert content  # non-empty response

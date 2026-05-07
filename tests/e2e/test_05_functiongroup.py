@@ -110,7 +110,7 @@ class TestFunctionGroupLifecycle:
                 "name": self._fg_name,
                 "system": system_name,
             })
-            assert isinstance(content, str)
+            assert content  # non-empty response
         except Exception:
             self.__class__._failed = True
             raise
