@@ -19,7 +19,7 @@ class TestClassLifecycle:
         TestClassLifecycle._class_name = f"ZCL_E2E_{run_id}"
         TestClassLifecycle._failed = False
 
-    @pytest_asyncio.fixture(autouse=True, scope="class")
+    @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
     async def cleanup(self, mcp_client, system_name, run_id):
         """Delete class after tests."""
         yield

@@ -19,7 +19,7 @@ class TestProgramLifecycle:
         TestProgramLifecycle._prog_name = f"ZE2E_PROG_{run_id}"
         TestProgramLifecycle._failed = False
 
-    @pytest_asyncio.fixture(autouse=True, scope="class")
+    @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
     async def cleanup(self, mcp_client, system_name, run_id):
         """Ensure program is deleted after all tests in this class."""
         yield
@@ -59,6 +59,7 @@ class TestProgramLifecycle:
             await call_tool_ok(mcp_client, "abap_program_write", {
                 "name": self._prog_name,
                 "source_data": source,
+                "no_check": False,
                 "system": system_name,
             })
         except Exception:
@@ -99,6 +100,7 @@ class TestProgramLifecycle:
             await call_tool_ok(mcp_client, "abap_program_write", {
                 "name": self._prog_name,
                 "source_data": new_source,
+                "no_check": False,
                 "system": system_name,
             })
             await call_tool_ok(mcp_client, "abap_program_activate", {

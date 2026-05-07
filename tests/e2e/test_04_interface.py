@@ -18,7 +18,7 @@ class TestInterfaceLifecycle:
         TestInterfaceLifecycle._intf_name = f"ZIF_E2E_{run_id}"
         TestInterfaceLifecycle._failed = False
 
-    @pytest_asyncio.fixture(autouse=True, scope="class")
+    @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
     async def cleanup(self, mcp_client, system_name, run_id):
         yield
         name = f"ZIF_E2E_{run_id}"
@@ -56,6 +56,7 @@ class TestInterfaceLifecycle:
             await call_tool_ok(mcp_client, "abap_interface_write", {
                 "name": self._intf_name,
                 "source_data": source,
+                "no_check": False,
                 "system": system_name,
             })
         except Exception:

@@ -116,7 +116,7 @@ def mcp_server(config_path):
     return create_mcp_server(experimental=True, config_path=config_path)
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def mcp_client(mcp_server):
     """In-process MCP client connected to the test server."""
     client = Client(mcp_server)
@@ -124,7 +124,7 @@ async def mcp_client(mcp_server):
         yield client
 
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session", loop_scope="session")
 async def package_name(mcp_client, system_name, run_id):
     """Attempt to create a test package; fall back to $TMP if it fails.
 
@@ -153,7 +153,7 @@ async def package_name(mcp_client, system_name, run_id):
     return "$TMP"
 
 
-@pytest_asyncio.fixture(scope="session", autouse=True)
+@pytest_asyncio.fixture(scope="session", loop_scope="session", autouse=True)
 async def session_cleanup(mcp_client, system_name, run_id, package_name):
     """Final cleanup: attempt to delete the test package after all tests."""
     from .helpers import safe_delete

@@ -18,7 +18,7 @@ class TestDDLLifecycle:
         TestDDLLifecycle._ddl_name = f"ZE2E_DDL_{run_id}"
         TestDDLLifecycle._failed = False
 
-    @pytest_asyncio.fixture(autouse=True, scope="class")
+    @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
     async def cleanup(self, mcp_client, system_name, run_id):
         yield
         name = f"ZE2E_DDL_{run_id}"
@@ -60,6 +60,7 @@ class TestDDLLifecycle:
             await call_tool_ok(mcp_client, "abap_ddl_write", {
                 "name": self._ddl_name,
                 "source_data": source,
+                "no_check": False,
                 "system": system_name,
             })
         except Exception:

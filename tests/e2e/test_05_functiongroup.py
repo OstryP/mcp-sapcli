@@ -20,7 +20,7 @@ class TestFunctionGroupLifecycle:
         TestFunctionGroupLifecycle._fm_name = f"ZE2E_FM_{run_id}"
         TestFunctionGroupLifecycle._failed = False
 
-    @pytest_asyncio.fixture(autouse=True, scope="class")
+    @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
     async def cleanup(self, mcp_client, system_name, run_id):
         yield
         # Deleting the function group cascades to the FM
@@ -65,10 +65,7 @@ class TestFunctionGroupLifecycle:
         """Write source code to the function module."""
         source = (
             f"FUNCTION {self._fm_name.lower()}.\n"
-            "*\"----------------------------------------------------------------------\n"
-            f"*\" E2E test function module\n"
-            "*\"----------------------------------------------------------------------\n"
-            "  \" No parameters\n"
+            "  \" E2E test function module — no parameters\n"
             f"ENDFUNCTION.\n"
         )
         try:
@@ -76,6 +73,7 @@ class TestFunctionGroupLifecycle:
                 "name": self._fm_name,
                 "group": self._fg_name,
                 "source_data": source,
+                "no_check": False,
                 "system": system_name,
             })
         except Exception:
@@ -87,6 +85,7 @@ class TestFunctionGroupLifecycle:
         try:
             await call_tool_ok(mcp_client, "abap_functionmodule_activate", {
                 "name": [self._fm_name],
+                "group": self._fg_name,
                 "system": system_name,
             })
         except Exception:

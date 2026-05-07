@@ -18,7 +18,7 @@ class TestTableLifecycle:
         TestTableLifecycle._table_name = f"ZE2E_TAB_{run_id}"
         TestTableLifecycle._failed = False
 
-    @pytest_asyncio.fixture(autouse=True, scope="class")
+    @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
     async def cleanup(self, mcp_client, system_name, run_id):
         yield
         name = f"ZE2E_TAB_{run_id}"
@@ -62,6 +62,7 @@ class TestTableLifecycle:
             await call_tool_ok(mcp_client, "abap_table_write", {
                 "name": self._table_name,
                 "source_data": source,
+                "no_check": False,
                 "system": system_name,
             })
         except Exception:
