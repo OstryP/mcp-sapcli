@@ -4,7 +4,6 @@ import argparse
 import os
 import sys
 
-from sapclimcp.config import ConfigError
 from sapclimcp.errors import format_startup_error
 from sapclimcp.server import create_mcp_server
 
@@ -60,12 +59,13 @@ def main(argv: list[str] | None = None):
             experimental=args.experimental,
             config_path=config_path,
         )
-    except ConfigError as exc:
-        sys.exit(f"Configuration error: {exc}")
     except Exception as exc:
         sys.exit(format_startup_error(exc))
 
-    if args.stdio:
-        server.run(transport="stdio")
-    else:
-        server.run(transport="http", host=args.host, port=args.port)
+    try:
+        if args.stdio:
+            server.run(transport="stdio")
+        else:
+            server.run(transport="http", host=args.host, port=args.port)
+    except Exception as exc:
+        sys.exit(format_startup_error(exc))

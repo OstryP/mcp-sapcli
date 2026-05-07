@@ -144,7 +144,9 @@ class TestCliMain:
         with pytest.raises(SystemExit) as exc_info:
             main(["--stdio", "--config", "bad.json"])
 
-        assert "Configuration error" in str(exc_info.value)
+        msg = str(exc_info.value)
+        assert "configuration error" in msg
+        assert "bad config" in msg
 
     @patch('sapclimcp.cli.create_mcp_server')
     def test_main_exits_on_unexpected_error(self, mock_create):

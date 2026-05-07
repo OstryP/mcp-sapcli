@@ -27,7 +27,11 @@ def main():
 
     # Capture stderr to a file so MCP stdio transport stays clean,
     # but we can still surface errors on startup failure.
+    # Note: stderr accumulates for the server's lifetime (logging output).
+    # This is acceptable — the file is deleted on exit and only displayed
+    # if the process exits with an error code.
     fd, stderr_log = tempfile.mkstemp(suffix='.log', prefix='sapcli-mcp-')
+    exit_code = 1
     try:
         with os.fdopen(fd, 'w') as stderr_file:
             exit_code = subprocess.call(

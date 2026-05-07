@@ -294,14 +294,16 @@ class SapcliCommandTool(Tool):
             "Only ADT and gCTS connections are currently supported."
         )
 
-    def _get_auth_context(self, system: Any) -> dict[str, str]:
+    def _get_auth_context(self, system: Any, cmd_args: SimpleNamespace | None = None) -> dict[str, str]:
         """Get auth context for error formatting."""
         if self.connection_manager is not None:
             try:
                 return self.connection_manager.get_auth_context(system)
             except ConfigError:
                 pass
-        return {'auth_type': 'basic', 'host': 'unknown', 'system_name': str(system or 'unknown')}
+        # Legacy mode: extract from cmd_args if available
+        host = getattr(cmd_args, 'ashost', 'unknown') if cmd_args else 'unknown'
+        return {'auth_type': 'basic', 'host': host, 'system_name': str(system or 'default')}
 
     async def run(self, arguments: dict[str, Any]) -> ToolResult:
         """Run the sapcli command with the given arguments.
@@ -362,13 +364,12 @@ class SapcliCommandTool(Tool):
             result = self._execute_command(cmd_args, connection)
         except UnauthorizedError as ex:
             if self.connection_manager is None:
-                ctx = self._get_auth_context(system)
+                ctx = self._get_auth_context(system, cmd_args)
                 raise SapcliCommandToolError(
                     format_auth_error(
                         auth_type=ctx['auth_type'],
                         system_name=ctx['system_name'],
                         host=ctx['host'],
-                        original_error=ex,
                     )
                 )
 
@@ -388,22 +389,25 @@ class SapcliCommandTool(Tool):
             try:
                 result = self._execute_command(cmd_args, connection)
             except UnauthorizedError as ex:
-                ctx = self._get_auth_context(system)
+                ctx = self._get_auth_context(system, cmd_args)
                 raise SapcliCommandToolError(
                     format_auth_error(
                         auth_type=ctx['auth_type'],
                         system_name=ctx['system_name'],
                         host=ctx['host'],
-                        original_error=ex,
                         is_retry=True,
                     )
                 )
         except SapcliCommandToolError:
             raise
         except Exception as ex:
+            _LOGGER.exception(
+                "Unexpected error in tool '%s'", self.name,
+            )
             raise SapcliCommandToolError(
                 f"Unexpected error in tool '{self.name}': "
-                f"{type(ex).__name__}: {ex}. This is likely a bug."
+                f"{type(ex).__name__}. This is likely a bug — "
+                f"check server logs for details."
             ) from ex
 
         # OperationResult is a NamedTuple which serializes as an array [bool, list[str], str]

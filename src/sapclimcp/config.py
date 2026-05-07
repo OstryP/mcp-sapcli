@@ -347,7 +347,7 @@ class ConnectionManager:
         return {
             'auth_type': sys_config.auth,
             'host': sys_config.ashost,
-            'system_name': resolved_name or 'unknown',
+            'system_name': resolved_name,
         }
 
     def evict(

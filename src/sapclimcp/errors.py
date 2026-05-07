@@ -12,7 +12,6 @@ def format_auth_error(
     auth_type: str,
     system_name: str,
     host: str,
-    original_error: Exception,
     is_retry: bool = False,
 ) -> str:
     """Format an authentication failure with context-aware guidance.
@@ -21,7 +20,6 @@ def format_auth_error(
         auth_type: 'cookie' or 'basic'.
         system_name: The configured system name (e.g. 'DEV').
         host: The SAP host.
-        original_error: The original exception.
         is_retry: Whether this is after a retry attempt.
     """
     header = f"Authentication failed for system '{system_name}' ({host})"
@@ -74,22 +72,12 @@ def format_connection_error(
 
     guidance = (
         f"Likely causes: host unreachable (check VPN/network), "
-        f"wrong port, or {ssl_hint.lower()}."
+        f"wrong port, or {ssl_hint[0].lower() + ssl_hint[1:]}."
     )
 
     action = f"Action: verify the host is reachable and port {port} is correct."
 
     return [f"{header} {guidance} {action}", str(original_error)]
-
-
-def format_command_error(tool_name: str, original_error: Exception) -> str:
-    """Format a command execution error with tool context.
-
-    Args:
-        tool_name: The MCP tool name that failed.
-        original_error: The original SAPCliError.
-    """
-    return f"Tool '{tool_name}' failed: {original_error}"
 
 
 def format_startup_error(error: Exception) -> str:

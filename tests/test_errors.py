@@ -5,7 +5,6 @@ import pytest
 from sapclimcp.errors import (
     format_auth_error,
     format_connection_error,
-    format_command_error,
     format_startup_error,
 )
 
@@ -14,24 +13,20 @@ class TestFormatAuthError:
     """Tests for format_auth_error."""
 
     def test_cookie_auth_mentions_sso_cookie(self):
-        err = Exception("HTTP 401")
         msg = format_auth_error(
             auth_type='cookie',
             system_name='DEV',
             host='dev.sap.example.com',
-            original_error=err,
         )
         assert "SSO cookie" in msg
         assert "DEV" in msg
         assert "dev.sap.example.com" in msg
 
     def test_cookie_auth_after_retry(self):
-        err = Exception("HTTP 401")
         msg = format_auth_error(
             auth_type='cookie',
             system_name='DEV',
             host='dev.sap.example.com',
-            original_error=err,
             is_retry=True,
         )
         assert "after retry" in msg
@@ -39,12 +34,10 @@ class TestFormatAuthError:
         assert "$ENV_VAR" in msg
 
     def test_basic_auth_mentions_user_password(self):
-        err = Exception("HTTP 401")
         msg = format_auth_error(
             auth_type='basic',
             system_name='QAS',
             host='qas.sap.example.com',
-            original_error=err,
         )
         assert "user" in msg
         assert "password" in msg
@@ -52,22 +45,18 @@ class TestFormatAuthError:
         assert "qas.sap.example.com" in msg
 
     def test_basic_auth_mentions_account_locked(self):
-        err = Exception("HTTP 401")
         msg = format_auth_error(
             auth_type='basic',
             system_name='QAS',
             host='qas.sap.example.com',
-            original_error=err,
         )
         assert "locked" in msg
 
     def test_basic_auth_after_retry(self):
-        err = Exception("HTTP 401")
         msg = format_auth_error(
             auth_type='basic',
             system_name='PRD',
             host='prd.sap.example.com',
-            original_error=err,
             is_retry=True,
         )
         assert "after retry" in msg
@@ -147,20 +136,6 @@ class TestFormatConnectionError:
         )
         assert isinstance(messages, list)
         assert len(messages) >= 1
-
-
-class TestFormatCommandError:
-    """Tests for format_command_error."""
-
-    def test_includes_tool_name(self):
-        err = Exception("Object not found")
-        msg = format_command_error(tool_name='abap_class_read', original_error=err)
-        assert "abap_class_read" in msg
-
-    def test_includes_original_error(self):
-        err = Exception("Object not found")
-        msg = format_command_error(tool_name='abap_class_read', original_error=err)
-        assert "Object not found" in msg
 
 
 class TestFormatStartupError:

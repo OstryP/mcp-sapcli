@@ -924,5 +924,6 @@ class TestActionableErrorMessages:
         msg = str(exc_info.value)
         assert "Unexpected error" in msg
         assert "RuntimeError" in msg
-        assert "something completely unexpected" in msg
         assert "bug" in msg
+        # str(ex) should NOT be included (could leak credentials)
+        assert "something completely unexpected" not in msg
