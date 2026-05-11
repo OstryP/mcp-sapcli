@@ -6,9 +6,6 @@ package without module-level side effects.
 
 from fastmcp import FastMCP
 
-from sapclimcp.mcptools import transform_sapcli_commands
-from sapclimcp.config import load_config, ConnectionManager
-
 # List of verified and supported sapcli commands exposed as MCP tools
 VERIFIED_COMMANDS = [
     "abap_package_list",
@@ -78,6 +75,8 @@ def create_mcp_server(
         Initialized FastMCP server with registered sapcli tools.
     """
     if config_path:
+        from sapclimcp.config import load_config, ConnectionManager
+
         server_config = load_config(config_path)
         connection_manager = ConnectionManager(server_config)
         instructions = MCP_SERVER_INSTRUCTIONS_MANAGED.format(
@@ -90,5 +89,8 @@ def create_mcp_server(
 
     mcp = FastMCP(name=name, instructions=instructions)
     allowed_commands = None if experimental else VERIFIED_COMMANDS
+
+    from sapclimcp.mcptools import transform_sapcli_commands
+
     transform_sapcli_commands(mcp, allowed_commands, connection_manager=connection_manager)
     return mcp

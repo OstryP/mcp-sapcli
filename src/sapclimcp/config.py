@@ -21,14 +21,12 @@ import sap.adt
 import sap.cli
 from sap.http.errors import UnauthorizedError
 
+from sapclimcp.errors import ConfigError
+
 
 _LOGGER = logging.getLogger(__name__)
 
 _ENV_VAR_RE = re.compile(r'^\$([A-Za-z_][A-Za-z0-9_]*)$')
-
-
-class ConfigError(Exception):
-    """Raised for configuration loading or validation errors."""
 
 
 class CookieSessionInitializer:
