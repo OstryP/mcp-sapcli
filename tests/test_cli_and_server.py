@@ -171,7 +171,7 @@ class TestCliMain:
 
         msg = str(exc_info.value)
         assert "missing dependency" in msg
-        assert "install" in msg
+        assert "sapcli is not installed" not in msg
 
     @patch('sapclimcp.cli.create_mcp_server')
     def test_main_exits_on_sapcli_import_error(self, mock_create):

@@ -165,12 +165,13 @@ class TestFormatStartupError:
         msg = format_startup_error(err)
         assert "missing dependency" in msg
         assert "No module named 'foo'" in msg
-        assert "install" in msg
+        assert "sapcli is not installed" not in msg
 
-    def test_import_error_no_name_attr(self):
+    def test_import_error_name_is_none(self):
         err = ImportError("No module named 'sap'")
         msg = format_startup_error(err)
         assert "missing dependency" in msg
+        assert "sapcli is not installed" not in msg
 
     def test_generic_error(self):
         err = RuntimeError("something broke")
