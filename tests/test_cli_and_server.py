@@ -8,7 +8,7 @@ import pytest
 
 from sapclimcp.server import create_mcp_server, VERIFIED_COMMANDS
 from sapclimcp.cli import parse_args, main
-from sapclimcp.config import ConfigError
+from sapclimcp.errors import ConfigError
 
 
 class TestParseArgs:
@@ -163,12 +163,24 @@ class TestCliMain:
 
     @patch('sapclimcp.cli.create_mcp_server')
     def test_main_exits_on_import_error(self, mock_create):
-        """ImportError produces guidance about installing dependencies."""
-        mock_create.side_effect = ImportError("No module named 'sap'")
+        """Generic ImportError produces guidance about installing dependencies."""
+        mock_create.side_effect = ImportError("No module named 'foo'", name='foo')
 
         with pytest.raises(SystemExit) as exc_info:
             main(["--stdio"])
 
         msg = str(exc_info.value)
         assert "missing dependency" in msg
-        assert "install" in msg
+        assert "sapcli is not installed" not in msg
+
+    @patch('sapclimcp.cli.create_mcp_server')
+    def test_main_exits_on_sapcli_import_error(self, mock_create):
+        """ImportError for sap.* produces sapcli-specific install guidance."""
+        mock_create.side_effect = ImportError("No module named 'sap'", name='sap')
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["--stdio"])
+
+        msg = str(exc_info.value)
+        assert "sapcli is not installed" in msg
+        assert "uv pip install" in msg

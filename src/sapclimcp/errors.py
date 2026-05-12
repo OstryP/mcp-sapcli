@@ -8,6 +8,10 @@ Each formatter produces a message with:
 """
 
 
+class ConfigError(Exception):
+    """Raised for configuration loading or validation errors."""
+
+
 def format_auth_error(
     auth_type: str,
     system_name: str,
@@ -89,9 +93,6 @@ def format_startup_error(error: Exception) -> str:
     Returns:
         Formatted error message suitable for stderr output.
     """
-    # Import here to avoid circular dependency (ConfigError is in config.py)
-    from sapclimcp.config import ConfigError
-
     if isinstance(error, ConfigError):
         return (
             f"Server startup failed: configuration error.\n"
@@ -100,6 +101,14 @@ def format_startup_error(error: Exception) -> str:
         )
 
     if isinstance(error, ImportError):
+        module = getattr(error, 'name', None) or ''
+        if module == 'sap' or module.startswith('sap.'):
+            return (
+                f"Server startup failed: sapcli is not installed.\n"
+                f"{error}\n"
+                f"Action: install sapcli — see README for pinned commit. "
+                f"Example: uv pip install 'sapcli @ git+https://github.com/jfilak/sapcli@dcd3da2d'"
+            )
         return (
             f"Server startup failed: missing dependency.\n"
             f"{error}\n"

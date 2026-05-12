@@ -530,7 +530,7 @@ class TestSapcliCommandToolWithConnectionManager:
     @pytest.mark.asyncio
     async def test_config_error_maps_to_tool_error(self):
         """ConfigError from connection_manager is converted to SapcliCommandToolError."""
-        from sapclimcp.config import ConfigError
+        from sapclimcp.errors import ConfigError
 
         mock_manager = MagicMock()
         mock_manager.get_connection.side_effect = ConfigError("Unknown system 'BAD'")
@@ -766,7 +766,7 @@ class TestRetryOnAuthFailure:
     @pytest.mark.asyncio
     async def test_retry_get_connection_failure_maps_to_tool_error(self):
         """If get_connection raises on retry, it becomes SapcliCommandToolError."""
-        from sapclimcp.config import ConfigError
+        from sapclimcp.errors import ConfigError
 
         mock_manager = MagicMock()
         mock_manager.get_connection.side_effect = [

@@ -142,19 +142,36 @@ class TestFormatStartupError:
     """Tests for format_startup_error."""
 
     def test_config_error(self):
-        from sapclimcp.config import ConfigError
+        from sapclimcp.errors import ConfigError
         err = ConfigError("Missing 'systems' key")
         msg = format_startup_error(err)
         assert "configuration error" in msg
         assert "Missing 'systems' key" in msg
         assert "config file" in msg
 
-    def test_import_error(self):
+    def test_import_error_sapcli(self):
+        err = ImportError("No module named 'sap'", name='sap')
+        msg = format_startup_error(err)
+        assert "sapcli is not installed" in msg
+        assert "uv pip install" in msg
+
+    def test_import_error_sapcli_submodule(self):
+        err = ImportError("No module named 'sap.adt'", name='sap.adt')
+        msg = format_startup_error(err)
+        assert "sapcli is not installed" in msg
+
+    def test_import_error_other(self):
+        err = ImportError("No module named 'foo'", name='foo')
+        msg = format_startup_error(err)
+        assert "missing dependency" in msg
+        assert "No module named 'foo'" in msg
+        assert "sapcli is not installed" not in msg
+
+    def test_import_error_name_is_none(self):
         err = ImportError("No module named 'sap'")
         msg = format_startup_error(err)
         assert "missing dependency" in msg
-        assert "No module named 'sap'" in msg
-        assert "install" in msg
+        assert "sapcli is not installed" not in msg
 
     def test_generic_error(self):
         err = RuntimeError("something broke")

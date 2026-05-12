@@ -41,7 +41,7 @@ from sapclimcp.toolpatches import (
     ConnectionPatch,
     apply_patches,
 )
-from sapclimcp.config import ConfigError
+from sapclimcp.errors import ConfigError
 from sapclimcp.errors import format_auth_error, format_connection_error
 
 _LOGGER = logging.getLogger(__name__)
