@@ -102,7 +102,7 @@ def format_startup_error(error: Exception) -> str:
 
     if isinstance(error, ImportError):
         module = getattr(error, 'name', None) or ''
-        if 'sap' in module:
+        if module == 'sap' or module.startswith('sap.'):
             return (
                 f"Server startup failed: sapcli is not installed.\n"
                 f"{error}\n"

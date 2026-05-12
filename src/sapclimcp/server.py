@@ -90,6 +90,7 @@ def create_mcp_server(
     mcp = FastMCP(name=name, instructions=instructions)
     allowed_commands = None if experimental else VERIFIED_COMMANDS
 
+    # Deferred: mcptools imports sap.* which may not be installed
     from sapclimcp.mcptools import transform_sapcli_commands
 
     transform_sapcli_commands(mcp, allowed_commands, connection_manager=connection_manager)
