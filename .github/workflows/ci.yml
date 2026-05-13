@@ -34,7 +34,7 @@ jobs:
         run: uv run ruff format --check src/ tests/
 
   unit-tests:
-    name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    name: Unit Tests · ${{ matrix.os }} · py${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -61,7 +61,7 @@ jobs:
         run: uv run pytest tests/ --ignore=tests/test_e2e.py -q
 
   type-check:
-    name: Type Check (mypy)
+    name: Type Safety (mypy)
     runs-on: ubuntu-latest
 
     steps:
@@ -84,7 +84,7 @@ jobs:
         run: uv run mypy src/sapclimcp/ --ignore-missing-imports
 
   package:
-    name: Package & Smoke Test
+    name: Install & Import Check
     runs-on: ubuntu-latest
 
     steps:
