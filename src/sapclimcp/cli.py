@@ -125,7 +125,7 @@ def main(argv: list[str] | None = None):
             stream=sys.stderr,
             force=True,
         )
-        if getattr(args, "stdio", False) and log_level == "DEBUG":
+        if args.stdio and log_level == "DEBUG":
             logging.getLogger(__name__).debug(
                 "DEBUG logging active on stderr — may be visible to MCP client in stdio mode"
             )

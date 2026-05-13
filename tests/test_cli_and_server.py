@@ -228,6 +228,18 @@ class TestCliMain:
 
         mock_basic.assert_not_called()
 
+    @patch("sapclimcp.cli.create_mcp_server")
+    def test_main_stdio_debug_logs_warning(self, mock_create, monkeypatch, capsys):
+        monkeypatch.delenv("SAPCLI_MCP_CONFIG", raising=False)
+        monkeypatch.delenv("SAPCLI_MCP_LOG_LEVEL", raising=False)
+        mock_server = MagicMock()
+        mock_create.return_value = mock_server
+
+        main(["--stdio", "--log-level", "DEBUG"])
+
+        captured = capsys.readouterr()
+        assert "stdio" in captured.err
+
     @patch("sapclimcp.cli.logging.basicConfig")
     @patch("sapclimcp.cli.create_mcp_server")
     def test_main_log_level_from_env(self, mock_create, mock_basic, monkeypatch):
