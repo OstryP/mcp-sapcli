@@ -1,6 +1,7 @@
 """Tests for sapclimcp.server and sapclimcp.cli."""
 
 import asyncio
+import sys
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
@@ -212,6 +213,7 @@ class TestCliMain:
         mock_basic.assert_called_once()
         kwargs = mock_basic.call_args.kwargs
         assert kwargs["level"] == logging.DEBUG
+        assert kwargs["stream"] is sys.stderr
         assert kwargs["force"] is True
 
     @patch("sapclimcp.cli.logging.basicConfig")
@@ -240,6 +242,18 @@ class TestCliMain:
 
         mock_basic.assert_called_once()
         assert mock_basic.call_args.kwargs["level"] == logging.WARNING
+
+    @patch("sapclimcp.cli.logging.basicConfig")
+    @patch("sapclimcp.cli.create_mcp_server")
+    def test_main_log_level_invalid_env_skips(self, mock_create, mock_basic, monkeypatch):
+        monkeypatch.delenv("SAPCLI_MCP_CONFIG", raising=False)
+        monkeypatch.setenv("SAPCLI_MCP_LOG_LEVEL", "VERBOSE")
+        mock_server = MagicMock()
+        mock_create.return_value = mock_server
+
+        main(["--stdio"])
+
+        mock_basic.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

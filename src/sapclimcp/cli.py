@@ -114,9 +114,10 @@ def main(argv: list[str] | None = None):
     args = parse_args(argv)
 
     # Configure logging early so it applies to all code paths
-    log_level = args.log_level or os.environ.get("SAPCLI_MCP_LOG_LEVEL", "").upper() or None
+    _VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    env_level = os.environ.get("SAPCLI_MCP_LOG_LEVEL", "").upper()
+    log_level = args.log_level or (env_level if env_level in _VALID_LEVELS else None)
     if log_level:
-        # choices= guarantees a valid logging constant name
         logging.basicConfig(
             level=getattr(logging, log_level),
             format="%(asctime)s %(name)s %(levelname)s %(message)s",
