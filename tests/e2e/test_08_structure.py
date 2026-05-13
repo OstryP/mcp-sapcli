@@ -3,7 +3,7 @@
 import pytest
 import pytest_asyncio
 
-from .helpers import call_tool_ok, call_tool_check, safe_delete
+from .helpers import call_tool_check, call_tool_ok, safe_delete
 
 
 class TestStructureLifecycle:
@@ -20,10 +20,14 @@ class TestStructureLifecycle:
     @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
     async def cleanup(self, mcp_client, system_name):
         yield
-        await safe_delete(mcp_client, "abap_structure_delete", {
-            "name": [self.__class__._struc_name],
-            "system": system_name,
-        })
+        await safe_delete(
+            mcp_client,
+            "abap_structure_delete",
+            {
+                "name": [self.__class__._struc_name],
+                "system": system_name,
+            },
+        )
 
     @pytest.fixture(autouse=True)
     def skip_if_prior_failed(self):
@@ -33,12 +37,16 @@ class TestStructureLifecycle:
     async def test_01_create(self, mcp_client, system_name, package_name):
         """Create the structure."""
         try:
-            await call_tool_ok(mcp_client, "abap_structure_create", {
-                "name": self._struc_name,
-                "description": "E2E test structure",
-                "package": package_name,
-                "system": system_name,
-            })
+            await call_tool_ok(
+                mcp_client,
+                "abap_structure_create",
+                {
+                    "name": self._struc_name,
+                    "description": "E2E test structure",
+                    "package": package_name,
+                    "system": system_name,
+                },
+            )
         except Exception:
             self.__class__._failed = True
             raise
@@ -54,12 +62,16 @@ class TestStructureLifecycle:
             "}\n"
         )
         try:
-            await call_tool_ok(mcp_client, "abap_structure_write", {
-                "name": self._struc_name,
-                "source_data": source,
-                "no_check": False,
-                "system": system_name,
-            })
+            await call_tool_ok(
+                mcp_client,
+                "abap_structure_write",
+                {
+                    "name": self._struc_name,
+                    "source_data": source,
+                    "no_check": False,
+                    "system": system_name,
+                },
+            )
         except Exception:
             self.__class__._failed = True
             raise
@@ -67,10 +79,14 @@ class TestStructureLifecycle:
     async def test_03_activate(self, mcp_client, system_name):
         """Activate the structure."""
         try:
-            await call_tool_ok(mcp_client, "abap_structure_activate", {
-                "name": [self._struc_name],
-                "system": system_name,
-            })
+            await call_tool_ok(
+                mcp_client,
+                "abap_structure_activate",
+                {
+                    "name": [self._struc_name],
+                    "system": system_name,
+                },
+            )
         except Exception:
             self.__class__._failed = True
             raise
@@ -78,10 +94,14 @@ class TestStructureLifecycle:
     async def test_04_read(self, mcp_client, system_name):
         """Read back structure definition and verify."""
         try:
-            content = await call_tool_ok(mcp_client, "abap_structure_read", {
-                "name": self._struc_name,
-                "system": system_name,
-            })
+            content = await call_tool_ok(
+                mcp_client,
+                "abap_structure_read",
+                {
+                    "name": self._struc_name,
+                    "system": system_name,
+                },
+            )
             assert "name" in content.lower()
         except Exception:
             self.__class__._failed = True
@@ -89,12 +109,20 @@ class TestStructureLifecycle:
 
     async def test_05_delete(self, mcp_client, system_name):
         """Delete the structure and verify it's gone."""
-        await call_tool_ok(mcp_client, "abap_structure_delete", {
-            "name": [self._struc_name],
-            "system": system_name,
-        })
-        success, _, _ = await call_tool_check(mcp_client, "abap_structure_read", {
-            "name": self._struc_name,
-            "system": system_name,
-        })
+        await call_tool_ok(
+            mcp_client,
+            "abap_structure_delete",
+            {
+                "name": [self._struc_name],
+                "system": system_name,
+            },
+        )
+        success, _, _ = await call_tool_check(
+            mcp_client,
+            "abap_structure_read",
+            {
+                "name": self._struc_name,
+                "system": system_name,
+            },
+        )
         assert not success, "Structure should not exist after deletion"

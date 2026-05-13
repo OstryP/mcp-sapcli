@@ -3,7 +3,7 @@
 import pytest
 import pytest_asyncio
 
-from .helpers import call_tool_ok, call_tool_check, safe_delete
+from .helpers import call_tool_check, call_tool_ok, safe_delete
 
 
 class TestTableLifecycle:
@@ -20,10 +20,14 @@ class TestTableLifecycle:
     @pytest_asyncio.fixture(autouse=True, scope="class", loop_scope="session")
     async def cleanup(self, mcp_client, system_name):
         yield
-        await safe_delete(mcp_client, "abap_table_delete", {
-            "name": [self.__class__._table_name],
-            "system": system_name,
-        })
+        await safe_delete(
+            mcp_client,
+            "abap_table_delete",
+            {
+                "name": [self.__class__._table_name],
+                "system": system_name,
+            },
+        )
 
     @pytest.fixture(autouse=True)
     def skip_if_prior_failed(self):
@@ -33,12 +37,16 @@ class TestTableLifecycle:
     async def test_01_create(self, mcp_client, system_name, package_name):
         """Create the table."""
         try:
-            await call_tool_ok(mcp_client, "abap_table_create", {
-                "name": self._table_name,
-                "description": "E2E test table",
-                "package": package_name,
-                "system": system_name,
-            })
+            await call_tool_ok(
+                mcp_client,
+                "abap_table_create",
+                {
+                    "name": self._table_name,
+                    "description": "E2E test table",
+                    "package": package_name,
+                    "system": system_name,
+                },
+            )
         except Exception:
             self.__class__._failed = True
             raise
@@ -57,12 +65,16 @@ class TestTableLifecycle:
             "}\n"
         )
         try:
-            await call_tool_ok(mcp_client, "abap_table_write", {
-                "name": self._table_name,
-                "source_data": source,
-                "no_check": False,
-                "system": system_name,
-            })
+            await call_tool_ok(
+                mcp_client,
+                "abap_table_write",
+                {
+                    "name": self._table_name,
+                    "source_data": source,
+                    "no_check": False,
+                    "system": system_name,
+                },
+            )
         except Exception:
             self.__class__._failed = True
             raise
@@ -70,10 +82,14 @@ class TestTableLifecycle:
     async def test_03_activate(self, mcp_client, system_name):
         """Activate the table."""
         try:
-            await call_tool_ok(mcp_client, "abap_table_activate", {
-                "name": [self._table_name],
-                "system": system_name,
-            })
+            await call_tool_ok(
+                mcp_client,
+                "abap_table_activate",
+                {
+                    "name": [self._table_name],
+                    "system": system_name,
+                },
+            )
         except Exception:
             self.__class__._failed = True
             raise
@@ -81,10 +97,14 @@ class TestTableLifecycle:
     async def test_04_read(self, mcp_client, system_name):
         """Read back table definition and verify."""
         try:
-            content = await call_tool_ok(mcp_client, "abap_table_read", {
-                "name": self._table_name,
-                "system": system_name,
-            })
+            content = await call_tool_ok(
+                mcp_client,
+                "abap_table_read",
+                {
+                    "name": self._table_name,
+                    "system": system_name,
+                },
+            )
             assert "mandt" in content.lower()
         except Exception:
             self.__class__._failed = True
@@ -92,12 +112,20 @@ class TestTableLifecycle:
 
     async def test_05_delete(self, mcp_client, system_name):
         """Delete the table and verify it's gone."""
-        await call_tool_ok(mcp_client, "abap_table_delete", {
-            "name": [self._table_name],
-            "system": system_name,
-        })
-        success, _, _ = await call_tool_check(mcp_client, "abap_table_read", {
-            "name": self._table_name,
-            "system": system_name,
-        })
+        await call_tool_ok(
+            mcp_client,
+            "abap_table_delete",
+            {
+                "name": [self._table_name],
+                "system": system_name,
+            },
+        )
+        success, _, _ = await call_tool_check(
+            mcp_client,
+            "abap_table_read",
+            {
+                "name": self._table_name,
+                "system": system_name,
+            },
+        )
         assert not success, "Table should not exist after deletion"

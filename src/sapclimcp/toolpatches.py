@@ -9,8 +9,8 @@ no patching awareness at all.
 import os
 import tempfile
 from abc import ABC, abstractmethod
-from types import SimpleNamespace
 from collections.abc import Sequence
+from types import SimpleNamespace
 from typing import Any, Optional
 
 
@@ -56,8 +56,8 @@ class SourceDataPatch(ToolPatch):
 
     def applies_to(self, tool_name: str, tool: Any) -> bool:
         props = tool.input_schema.properties
-        source_spec = props.get('source')
-        return source_spec is not None and source_spec.get('type') == 'array'
+        source_spec = props.get("source")
+        return source_spec is not None and source_spec.get("type") == "array"
 
     def _set_source(self, args: SimpleNamespace, tmppath: str) -> None:
         args.source = [tmppath]
@@ -65,22 +65,22 @@ class SourceDataPatch(ToolPatch):
     def apply(self, tool: Any) -> None:
         schema = tool.input_schema
 
-        schema.properties.pop('source', None)
-        if 'source' in schema.required:
-            schema.required.remove('source')
+        schema.properties.pop("source", None)
+        if "source" in schema.required:
+            schema.required.remove("source")
 
-        schema.properties['source_data'] = {
-            'type': 'string',
-            'description': 'Inline source code content',
+        schema.properties["source_data"] = {
+            "type": "string",
+            "description": "Inline source code content",
         }
-        if 'source_data' not in schema.required:
-            schema.required.append('source_data')
+        if "source_data" not in schema.required:
+            schema.required.append("source_data")
 
         original_cmdfn = tool.cmdfn
         set_source = self._set_source
 
         def wrapped_cmdfn(conn: Any, args: SimpleNamespace) -> None:
-            source_data = getattr(args, 'source_data', None)
+            source_data = getattr(args, "source_data", None)
             if source_data is None:
                 original_cmdfn(conn, args)
                 return
@@ -88,9 +88,9 @@ class SourceDataPatch(ToolPatch):
             if not source_data:
                 raise ValueError("source_data must not be empty")
 
-            fd, tmppath = tempfile.mkstemp(suffix='.abap')
+            fd, tmppath = tempfile.mkstemp(suffix=".abap")
             try:
-                with os.fdopen(fd, 'w', encoding='utf-8') as fobj:
+                with os.fdopen(fd, "w", encoding="utf-8") as fobj:
                     fobj.write(source_data)
             except Exception:
                 os.unlink(tmppath)
@@ -118,8 +118,8 @@ class SourceFileToInlinePatch(SourceDataPatch):
 
     def applies_to(self, tool_name: str, tool: Any) -> bool:
         props = tool.input_schema.properties
-        source_spec = props.get('source')
-        return source_spec is not None and source_spec.get('type') == 'string'
+        source_spec = props.get("source")
+        return source_spec is not None and source_spec.get("type") == "string"
 
     def _set_source(self, args: SimpleNamespace, tmppath: str) -> None:
         args.source = tmppath
@@ -138,21 +138,23 @@ class MissingGroupParamPatch(ToolPatch):
     ships the fix and our minimum version requires it.
     """
 
-    _AFFECTED_TOOLS = frozenset({
-        'abap_functionmodule_delete',
-        'abap_functionmodule_whereused',
-        'abap_functiongroup_include_whereused',
-        'abap_functiongroup_include_delete',
-    })
+    _AFFECTED_TOOLS = frozenset(
+        {
+            "abap_functionmodule_delete",
+            "abap_functionmodule_whereused",
+            "abap_functiongroup_include_whereused",
+            "abap_functiongroup_include_delete",
+        }
+    )
 
     def applies_to(self, tool_name: str, tool: Any) -> bool:
         return tool_name in self._AFFECTED_TOOLS
 
     def apply(self, tool: Any) -> None:
         schema = tool.input_schema
-        if 'group' not in schema.properties:
-            schema.properties['group'] = {'type': 'string'}
-            schema.required.append('group')
+        if "group" not in schema.properties:
+            schema.properties["group"] = {"type": "string"}
+            schema.required.append("group")
 
 
 class ConnectionPatch(ToolPatch):
@@ -167,10 +169,18 @@ class ConnectionPatch(ToolPatch):
       configured (or a single system with a default)
     """
 
-    CONNECTION_PARAMS = frozenset({
-        'ashost', 'port', 'client', 'user', 'password',
-        'ssl', 'verify', 'sysnr',
-    })
+    CONNECTION_PARAMS = frozenset(
+        {
+            "ashost",
+            "port",
+            "client",
+            "user",
+            "password",
+            "ssl",
+            "verify",
+            "sysnr",
+        }
+    )
 
     def __init__(
         self,
@@ -185,9 +195,7 @@ class ConnectionPatch(ToolPatch):
         self._default_system = default_system
 
     def applies_to(self, tool_name: str, tool: Any) -> bool:
-        return bool(
-            self.CONNECTION_PARAMS & set(tool.input_schema.properties.keys())
-        )
+        return bool(self.CONNECTION_PARAMS & set(tool.input_schema.properties.keys()))
 
     def apply(self, tool: Any) -> None:
         schema = tool.input_schema
@@ -198,22 +206,22 @@ class ConnectionPatch(ToolPatch):
                 schema.required.remove(param)
 
         if len(self._system_names) > 1:
-            desc = f'Target SAP system. Available: {", ".join(self._system_names)}'
+            desc = f"Target SAP system. Available: {', '.join(self._system_names)}"
             if self._default_system:
-                desc += f'. Default: {self._default_system}'
-            schema.properties['system'] = {
-                'type': 'string',
-                'description': desc,
-                'enum': self._system_names,
+                desc += f". Default: {self._default_system}"
+            schema.properties["system"] = {
+                "type": "string",
+                "description": desc,
+                "enum": self._system_names,
             }
             if not self._default_system:
-                schema.required.append('system')
+                schema.required.append("system")
         elif len(self._system_names) == 1:
-            schema.properties['system'] = {
-                'type': 'string',
-                'description': f'Target SAP system (default: {self._system_names[0]})',
-                'default': self._system_names[0],
-                'enum': self._system_names,
+            schema.properties["system"] = {
+                "type": "string",
+                "description": f"Target SAP system (default: {self._system_names[0]})",
+                "default": self._system_names[0],
+                "enum": self._system_names,
             }
 
 

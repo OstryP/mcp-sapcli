@@ -3,8 +3,10 @@ MCP tool classes and helpers for sapcli commands.
 """
 
 import logging
+from dataclasses import dataclass
 from functools import partial
 from io import StringIO
+from types import SimpleNamespace
 from typing import (
     Any,
     Callable,
@@ -12,37 +14,31 @@ from typing import (
     Generic,
     NamedTuple,
 )
-from dataclasses import dataclass
-from types import SimpleNamespace
-from typing_extensions import TypeVar
 
+import sap.cli
+import sap.cli.core
+from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
+from fastmcp.tools import Tool
+from fastmcp.tools.tool import ToolResult
 from pydantic import TypeAdapter
-
 from sap import (
     adt,
     errors,
 )
 from sap.http.errors import UnauthorizedError
-
-import sap.cli
-import sap.cli.core
-
-from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
-from fastmcp.tools import Tool
-from fastmcp.tools.tool import ToolResult
+from typing_extensions import TypeVar
 
 from sapclimcp import argparsertool
 from sapclimcp.argparsertool import ArgParserTool
+from sapclimcp.errors import ConfigError, format_auth_error, format_connection_error
 from sapclimcp.toolpatches import (
+    ConnectionPatch,
+    MissingGroupParamPatch,
     SourceDataPatch,
     SourceFileToInlinePatch,
-    MissingGroupParamPatch,
-    ConnectionPatch,
     apply_patches,
 )
-from sapclimcp.errors import ConfigError
-from sapclimcp.errors import format_auth_error, format_connection_error
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,42 +48,41 @@ CommandType = Callable[[adt.Connection, SimpleNamespace], None]
 # Connection parameters for MCP tools
 # Common parameters required for all connection types
 COMMON_CONNECTION_PARAMS: dict[str, dict[str, str]] = {
-    'ashost': {'type': 'string'},
-    'client': {'type': 'string'},
-    'user': {'type': 'string'},
-    'password': {'type': 'string'},
+    "ashost": {"type": "string"},
+    "client": {"type": "string"},
+    "user": {"type": "string"},
+    "password": {"type": "string"},
 }
 
 # ADT connection specific parameters
 ADT_CONNECTION_PARAMS: dict[str, dict[str, str]] = {
-    'port': {'type': 'integer'},
-    'ssl': {'type': 'boolean'},
-    'verify': {'type': 'boolean'},
+    "port": {"type": "integer"},
+    "ssl": {"type": "boolean"},
+    "verify": {"type": "boolean"},
 }
 
 # RFC connection specific parameters
 RFC_CONNECTION_PARAMS: dict[str, dict[str, str]] = {
-    'sysnr': {'type': 'string'},
+    "sysnr": {"type": "string"},
 }
 
 # OData connection specific parameters
 ODATA_CONNECTION_PARAMS: dict[str, dict[str, str]] = {
-    'port': {'type': 'integer'},
-    'ssl': {'type': 'boolean'},
-    'verify': {'type': 'boolean'},
+    "port": {"type": "integer"},
+    "ssl": {"type": "boolean"},
+    "verify": {"type": "boolean"},
 }
 
 # REST/gCTS connection specific parameters
 GCTS_CONNECTION_PARAMS: dict[str, dict[str, str]] = {
-    'port': {'type': 'integer'},
-    'ssl': {'type': 'boolean'},
-    'verify': {'type': 'boolean'},
+    "port": {"type": "integer"},
+    "ssl": {"type": "boolean"},
+    "verify": {"type": "boolean"},
 }
 
 
 class OutputBuffer(sap.cli.core.PrintConsole):
-    """Capture output of sapcli commands in memory buffer.
-    """
+    """Capture output of sapcli commands in memory buffer."""
 
     def __init__(self):
         self.std_output = StringIO()
@@ -97,21 +92,18 @@ class OutputBuffer(sap.cli.core.PrintConsole):
 
     @property
     def capout(self) -> str:
-        """Captured standard output
-        """
+        """Captured standard output"""
 
         return self.std_output.getvalue()
 
     @property
     def caperr(self) -> str:
-        """Captured error output
-        """
+        """Captured error output"""
 
         return self.err_output.getvalue()
 
     def reset(self) -> None:
-        """Reset captured contents
-        """
+        """Reset captured contents"""
 
         self.std_output.truncate(0)
         self.std_output.seek(0)
@@ -120,8 +112,7 @@ class OutputBuffer(sap.cli.core.PrintConsole):
 
 
 class OperationResult(NamedTuple):
-    """MCP tool results
-    """
+    """MCP tool results"""
 
     Success: bool
     LogMessages: list[str]
@@ -131,7 +122,10 @@ class OperationResult(NamedTuple):
 # UnauthorizedError is a subclass of SAPCliError — its except clause must
 # precede the SAPCliError catch in the functions below.
 
-def _run_adt_command(args: SimpleNamespace, command: CommandType, connection: Any = None) -> OperationResult:
+
+def _run_adt_command(
+    args: SimpleNamespace, command: CommandType, connection: Any = None
+) -> OperationResult:
     if connection is None:
         try:
             connection = sap.cli.adt_connection_from_args(args)
@@ -139,25 +133,21 @@ def _run_adt_command(args: SimpleNamespace, command: CommandType, connection: An
             raise
         except errors.SAPCliError as ex:
             messages = format_connection_error(
-                host=getattr(args, 'ashost', 'unknown'),
-                port=getattr(args, 'port', 443),
-                ssl=getattr(args, 'ssl', True),
+                host=getattr(args, "ashost", "unknown"),
+                port=getattr(args, "port", 443),
+                ssl=getattr(args, "ssl", True),
                 original_error=ex,
-                service_type='ADT',
+                service_type="ADT",
             )
-            return OperationResult(
-                    Success=False,
-                    LogMessages=messages,
-                    Contents=""
-                )
+            return OperationResult(Success=False, LogMessages=messages, Contents="")
 
     return _run_sapcli_command(command, connection, args)
 
 
 def _run_gcts_command(
-        args: SimpleNamespace,
-        command: CommandType,
-        connection: Any = None,
+    args: SimpleNamespace,
+    command: CommandType,
+    connection: Any = None,
 ) -> OperationResult:
     if connection is None:
         try:
@@ -166,22 +156,20 @@ def _run_gcts_command(
             raise
         except errors.SAPCliError as ex:
             messages = format_connection_error(
-                host=getattr(args, 'ashost', 'unknown'),
-                port=getattr(args, 'port', 443),
-                ssl=getattr(args, 'ssl', True),
+                host=getattr(args, "ashost", "unknown"),
+                port=getattr(args, "port", 443),
+                ssl=getattr(args, "ssl", True),
                 original_error=ex,
-                service_type='gCTS',
+                service_type="gCTS",
             )
-            return OperationResult(
-                    Success=False,
-                    LogMessages=messages,
-                    Contents=""
-                )
+            return OperationResult(Success=False, LogMessages=messages, Contents="")
 
     return _run_sapcli_command(command, connection, args)
 
 
-def _run_sapcli_command(command: CommandType, conn: adt.Connection, args: SimpleNamespace) -> OperationResult:
+def _run_sapcli_command(
+    command: CommandType, conn: adt.Connection, args: SimpleNamespace
+) -> OperationResult:
 
     output_buffer = OutputBuffer()
 
@@ -195,16 +183,14 @@ def _run_sapcli_command(command: CommandType, conn: adt.Connection, args: Simple
         raise
     except errors.SAPCliError as ex:
         return OperationResult(
-                Success=False,
-                LogMessages=[str(ex), output_buffer.caperr],
-                Contents=output_buffer.capout
-            )
+            Success=False,
+            LogMessages=[str(ex), output_buffer.caperr],
+            Contents=output_buffer.capout,
+        )
 
     return OperationResult(
-            Success=True,
-            LogMessages=[output_buffer.caperr],
-            Contents=output_buffer.capout
-        )
+        Success=True, LogMessages=[output_buffer.caperr], Contents=output_buffer.capout
+    )
 
 
 T = TypeVar("T", default=Any)
@@ -233,21 +219,20 @@ class SapcliCommandTool(Tool):
     """
 
     # Pydantic requires this for fields with non-serializable types (ArgParserTool)
-    model_config = {'arbitrary_types_allowed': True}
+    model_config = {"arbitrary_types_allowed": True}
 
     arg_tool: ArgParserTool
     connection_manager: Any = None
 
     # HTTP connection parameter names used by ADT and gCTS
-    HTTP_CONNECTION_PARAMS: ClassVar[frozenset[str]] = frozenset({
-        'ashost', 'port', 'client', 'user', 'password',
-        'ssl', 'verify'
-    })
+    HTTP_CONNECTION_PARAMS: ClassVar[frozenset[str]] = frozenset(
+        {"ashost", "port", "client", "user", "password", "ssl", "verify"}
+    )
 
     def _run_adt(
-            self,
-            cmd_args: SimpleNamespace,
-            connection: Any = None,
+        self,
+        cmd_args: SimpleNamespace,
+        connection: Any = None,
     ) -> OperationResult:
         """Execute an ADT command.
 
@@ -261,9 +246,9 @@ class SapcliCommandTool(Tool):
         return _run_adt_command(cmd_args, self.arg_tool.cmdfn, connection)
 
     def _run_gcts(
-            self,
-            cmd_args: SimpleNamespace,
-            connection: Any = None,
+        self,
+        cmd_args: SimpleNamespace,
+        connection: Any = None,
     ) -> OperationResult:
         """Execute a gCTS command.
 
@@ -277,15 +262,15 @@ class SapcliCommandTool(Tool):
         return _run_gcts_command(cmd_args, self.arg_tool.cmdfn, connection)
 
     def _execute_command(
-            self,
-            cmd_args: SimpleNamespace,
-            connection: Any = None,
+        self,
+        cmd_args: SimpleNamespace,
+        connection: Any = None,
     ) -> OperationResult:
         """Dispatch to the appropriate connection-type runner."""
 
-        if self.arg_tool.conn_type == 'adt':
+        if self.arg_tool.conn_type == "adt":
             return self._run_adt(cmd_args, connection)
-        if self.arg_tool.conn_type == 'gcts':
+        if self.arg_tool.conn_type == "gcts":
             return self._run_gcts(cmd_args, connection)
 
         raise SapcliCommandToolError(
@@ -294,7 +279,9 @@ class SapcliCommandTool(Tool):
             "Only ADT and gCTS connections are currently supported."
         )
 
-    def _get_auth_context(self, system: Any, cmd_args: SimpleNamespace | None = None) -> dict[str, str]:
+    def _get_auth_context(
+        self, system: Any, cmd_args: SimpleNamespace | None = None
+    ) -> dict[str, str]:
         """Get auth context for error formatting."""
         if self.connection_manager is not None:
             try:
@@ -302,8 +289,12 @@ class SapcliCommandTool(Tool):
             except ConfigError:
                 pass
         # Legacy mode: extract from cmd_args if available
-        host = getattr(cmd_args, 'ashost', 'unknown') if cmd_args else 'unknown'
-        return {'auth_type': 'basic', 'host': host, 'system_name': str(system or 'default')}
+        host = getattr(cmd_args, "ashost", "unknown") if cmd_args else "unknown"
+        return {
+            "auth_type": "basic",
+            "host": host,
+            "system_name": str(system or "default"),
+        }
 
     async def run(self, arguments: dict[str, Any]) -> ToolResult:
         """Run the sapcli command with the given arguments.
@@ -330,15 +321,13 @@ class SapcliCommandTool(Tool):
 
         # Work on a copy to avoid mutating the caller's dict
         arguments = dict(arguments)
-        system = arguments.pop('system', None)
+        system = arguments.pop("system", None)
 
         # Resolve connection from manager if available
         connection = None
         if self.connection_manager is not None:
             try:
-                connection = self.connection_manager.get_connection(
-                    system, self.arg_tool.conn_type
-                )
+                connection = self.connection_manager.get_connection(system, self.arg_tool.conn_type)
             except ConfigError as ex:
                 raise SapcliCommandToolError(str(ex))
 
@@ -365,14 +354,14 @@ class SapcliCommandTool(Tool):
         # the command body executes any writes.
         try:
             result = self._execute_command(cmd_args, connection)
-        except UnauthorizedError as ex:
+        except UnauthorizedError:
             if self.connection_manager is None:
                 ctx = self._get_auth_context(system, cmd_args)
                 raise SapcliCommandToolError(
                     format_auth_error(
-                        auth_type=ctx['auth_type'],
-                        system_name=ctx['system_name'],
-                        host=ctx['host'],
+                        auth_type=ctx["auth_type"],
+                        system_name=ctx["system_name"],
+                        host=ctx["host"],
                     )
                 )
 
@@ -383,21 +372,19 @@ class SapcliCommandTool(Tool):
             self.connection_manager.evict(system, self.arg_tool.conn_type)
 
             try:
-                connection = self.connection_manager.get_connection(
-                    system, self.arg_tool.conn_type
-                )
+                connection = self.connection_manager.get_connection(system, self.arg_tool.conn_type)
             except ConfigError as ex:
                 raise SapcliCommandToolError(str(ex))
 
             try:
                 result = self._execute_command(cmd_args, connection)
-            except UnauthorizedError as ex:
+            except UnauthorizedError:
                 ctx = self._get_auth_context(system, cmd_args)
                 raise SapcliCommandToolError(
                     format_auth_error(
-                        auth_type=ctx['auth_type'],
-                        system_name=ctx['system_name'],
-                        host=ctx['host'],
+                        auth_type=ctx["auth_type"],
+                        system_name=ctx["system_name"],
+                        host=ctx["host"],
                         is_retry=True,
                     )
                 )
@@ -405,7 +392,8 @@ class SapcliCommandTool(Tool):
             raise
         except Exception as ex:
             _LOGGER.exception(
-                "Unexpected error in tool '%s'", self.name,
+                "Unexpected error in tool '%s'",
+                self.name,
             )
             raise SapcliCommandToolError(
                 f"Unexpected error in tool '{self.name}': "
@@ -416,9 +404,7 @@ class SapcliCommandTool(Tool):
         # OperationResult is a NamedTuple which serializes as an array [bool, list[str], str]
         return ToolResult(
             content=result.Contents,
-            structured_content={
-                'result': [result.Success, result.LogMessages, result.Contents]
-            }
+            structured_content={"result": [result.Success, result.LogMessages, result.Contents]},
         )
 
     @classmethod
@@ -427,7 +413,7 @@ class SapcliCommandTool(Tool):
         cmd: ArgParserTool,
         description: str | None = None,
         connection_manager: Any = None,
-    ) -> 'SapcliCommandTool':
+    ) -> "SapcliCommandTool":
         """Create a SapcliCommandTool from an ArgParserTool.
 
         Args:
@@ -441,7 +427,9 @@ class SapcliCommandTool(Tool):
         Raises:
             SapcliCommandToolError: If cmd.cmdfn is None.
         """
-        output_schema = TypeAdapter(_WrappedResult[OperationResult]).json_schema(mode='serialization')
+        output_schema = TypeAdapter(_WrappedResult[OperationResult]).json_schema(
+            mode="serialization"
+        )
         output_schema["x-fastmcp-wrap-result"] = True
 
         return cls(
@@ -481,10 +469,10 @@ def transform_sapcli_commands(
 
     # Resolve factory → type string once at registration time
     conn_factory_to_type = {
-        sap.cli.adt_connection_from_args: 'adt',
-        sap.cli.rfc_connection_from_args: 'rfc',
-        sap.cli.gcts_connection_from_args: 'gcts',
-        sap.cli.odata_connection_from_args: 'odata',
+        sap.cli.adt_connection_from_args: "adt",
+        sap.cli.rfc_connection_from_args: "rfc",
+        sap.cli.gcts_connection_from_args: "gcts",
+        sap.cli.odata_connection_from_args: "odata",
     }
 
     # Install ArgParser and build Tools definitions
@@ -523,12 +511,18 @@ def transform_sapcli_commands(
 
     # ConnectionPatch must be last — it adds the 'system' selector after all
     # other patches have finished modifying schemas.
-    patch_registry = [SourceDataPatch(), SourceFileToInlinePatch(), MissingGroupParamPatch()]
+    patch_registry = [
+        SourceDataPatch(),
+        SourceFileToInlinePatch(),
+        MissingGroupParamPatch(),
+    ]
     if connection_manager is not None:
-        patch_registry.append(ConnectionPatch(
-            system_names=connection_manager.system_names,
-            default_system=connection_manager.default_system,
-        ))
+        patch_registry.append(
+            ConnectionPatch(
+                system_names=connection_manager.system_names,
+                default_system=connection_manager.default_system,
+            )
+        )
 
     for tool_name, cmd_tool in args_tools.tools.items():
         # Skip tools without a command function (not meaningful commands)
@@ -542,7 +536,9 @@ def transform_sapcli_commands(
 
         apply_patches(tool_name, cmd_tool, patch_registry)
 
-        server.add_tool(SapcliCommandTool.from_argparser_tool(
-            cmd_tool,
-            connection_manager=connection_manager,
-        ))
+        server.add_tool(
+            SapcliCommandTool.from_argparser_tool(
+                cmd_tool,
+                connection_manager=connection_manager,
+            )
+        )

@@ -1,7 +1,5 @@
 """Unit tests for sapclimcp.errors module."""
 
-import pytest
-
 from sapclimcp.errors import (
     format_auth_error,
     format_connection_error,
@@ -14,9 +12,9 @@ class TestFormatAuthError:
 
     def test_cookie_auth_mentions_sso_cookie(self):
         msg = format_auth_error(
-            auth_type='cookie',
-            system_name='DEV',
-            host='dev.sap.example.com',
+            auth_type="cookie",
+            system_name="DEV",
+            host="dev.sap.example.com",
         )
         assert "SSO cookie" in msg
         assert "DEV" in msg
@@ -24,9 +22,9 @@ class TestFormatAuthError:
 
     def test_cookie_auth_after_retry(self):
         msg = format_auth_error(
-            auth_type='cookie',
-            system_name='DEV',
-            host='dev.sap.example.com',
+            auth_type="cookie",
+            system_name="DEV",
+            host="dev.sap.example.com",
             is_retry=True,
         )
         assert "after retry" in msg
@@ -35,9 +33,9 @@ class TestFormatAuthError:
 
     def test_basic_auth_mentions_user_password(self):
         msg = format_auth_error(
-            auth_type='basic',
-            system_name='QAS',
-            host='qas.sap.example.com',
+            auth_type="basic",
+            system_name="QAS",
+            host="qas.sap.example.com",
         )
         assert "user" in msg
         assert "password" in msg
@@ -46,17 +44,17 @@ class TestFormatAuthError:
 
     def test_basic_auth_mentions_account_locked(self):
         msg = format_auth_error(
-            auth_type='basic',
-            system_name='QAS',
-            host='qas.sap.example.com',
+            auth_type="basic",
+            system_name="QAS",
+            host="qas.sap.example.com",
         )
         assert "locked" in msg
 
     def test_basic_auth_after_retry(self):
         msg = format_auth_error(
-            auth_type='basic',
-            system_name='PRD',
-            host='prd.sap.example.com',
+            auth_type="basic",
+            system_name="PRD",
+            host="prd.sap.example.com",
             is_retry=True,
         )
         assert "after retry" in msg
@@ -69,29 +67,29 @@ class TestFormatConnectionError:
     def test_includes_host_and_port(self):
         err = Exception("Connection refused")
         messages = format_connection_error(
-            host='dev.sap.example.com',
+            host="dev.sap.example.com",
             port=44300,
             ssl=True,
             original_error=err,
-            service_type='ADT',
+            service_type="ADT",
         )
         assert any("dev.sap.example.com:44300" in m for m in messages)
 
     def test_includes_service_type(self):
         err = Exception("Timeout")
         messages = format_connection_error(
-            host='host.example.com',
+            host="host.example.com",
             port=443,
             ssl=True,
             original_error=err,
-            service_type='gCTS',
+            service_type="gCTS",
         )
         assert any("gCTS" in m for m in messages)
 
     def test_suggests_vpn_check(self):
         err = Exception("Connection refused")
         messages = format_connection_error(
-            host='host.example.com',
+            host="host.example.com",
             port=443,
             ssl=True,
             original_error=err,
@@ -101,7 +99,7 @@ class TestFormatConnectionError:
     def test_ssl_enabled_hint(self):
         err = Exception("SSL error")
         messages = format_connection_error(
-            host='host.example.com',
+            host="host.example.com",
             port=443,
             ssl=True,
             original_error=err,
@@ -111,18 +109,18 @@ class TestFormatConnectionError:
     def test_ssl_disabled_hint(self):
         err = Exception("Connection reset")
         messages = format_connection_error(
-            host='host.example.com',
+            host="host.example.com",
             port=8000,
             ssl=False,
             original_error=err,
         )
-        combined = ' '.join(messages).lower()
+        combined = " ".join(messages).lower()
         assert "https" in combined
 
     def test_includes_original_error(self):
         err = Exception("Connection refused")
         messages = format_connection_error(
-            host='host.example.com',
+            host="host.example.com",
             port=443,
             ssl=True,
             original_error=err,
@@ -132,7 +130,10 @@ class TestFormatConnectionError:
     def test_returns_list(self):
         err = Exception("error")
         messages = format_connection_error(
-            host='h', port=443, ssl=True, original_error=err,
+            host="h",
+            port=443,
+            ssl=True,
+            original_error=err,
         )
         assert isinstance(messages, list)
         assert len(messages) >= 1
@@ -143,6 +144,7 @@ class TestFormatStartupError:
 
     def test_config_error(self):
         from sapclimcp.errors import ConfigError
+
         err = ConfigError("Missing 'systems' key")
         msg = format_startup_error(err)
         assert "configuration error" in msg
@@ -150,18 +152,18 @@ class TestFormatStartupError:
         assert "config file" in msg
 
     def test_import_error_sapcli(self):
-        err = ImportError("No module named 'sap'", name='sap')
+        err = ImportError("No module named 'sap'", name="sap")
         msg = format_startup_error(err)
         assert "sapcli is not installed" in msg
         assert "uv pip install" in msg
 
     def test_import_error_sapcli_submodule(self):
-        err = ImportError("No module named 'sap.adt'", name='sap.adt')
+        err = ImportError("No module named 'sap.adt'", name="sap.adt")
         msg = format_startup_error(err)
         assert "sapcli is not installed" in msg
 
     def test_import_error_other(self):
-        err = ImportError("No module named 'foo'", name='foo')
+        err = ImportError("No module named 'foo'", name="foo")
         msg = format_startup_error(err)
         assert "missing dependency" in msg
         assert "No module named 'foo'" in msg

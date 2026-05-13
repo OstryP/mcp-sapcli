@@ -71,9 +71,7 @@ async def call_tool_check(
     return _parse_result(result)
 
 
-async def safe_delete(
-    client: Client, tool_name: str, args: dict[str, Any]
-) -> None:
+async def safe_delete(client: Client, tool_name: str, args: dict[str, Any]) -> None:
     """Attempt to delete an object; log but don't fail on errors."""
     try:
         result = await client.call_tool(tool_name, args, raise_on_error=False)
@@ -83,12 +81,16 @@ async def safe_delete(
                 text = result.content[0].text or ""
             logger.warning(
                 "Delete via %s returned error (non-fatal): %s — %s",
-                tool_name, args.get("name", "unknown"), text[:200]
+                tool_name,
+                args.get("name", "unknown"),
+                text[:200],
             )
         else:
             logger.info("Deleted via %s: %s", tool_name, args.get("name", "unknown"))
     except Exception as exc:
         logger.warning(
             "Delete via %s failed (non-fatal): %s — %s",
-            tool_name, args.get("name", "unknown"), exc
+            tool_name,
+            args.get("name", "unknown"),
+            exc,
         )

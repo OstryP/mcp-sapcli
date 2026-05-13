@@ -63,12 +63,14 @@ def _check_env():
 
 # ─── Run ID ─────────────────────────────────────────────────────────────────
 
+
 def _generate_run_id() -> str:
     """Generate a short unique ID for this test run (4 random hex chars)."""
     return secrets.token_hex(2).upper()
 
 
 # ─── Config file creation ───────────────────────────────────────────────────
+
 
 def _create_config_file(tmp_dir: str) -> str:
     """Create a temporary config JSON file from environment variables."""
@@ -96,6 +98,7 @@ def _create_config_file(tmp_dir: str) -> str:
 
 
 # ─── Session-scoped fixtures ────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="session")
 def run_id():
@@ -130,6 +133,7 @@ def config_path(e2e_config_dir):
 def mcp_server(config_path):
     """Create the MCP server with experimental tools enabled."""
     from sapclimcp.server import create_mcp_server
+
     return create_mcp_server(experimental=True, config_path=config_path)
 
 
@@ -152,21 +156,21 @@ async def package_name(mcp_client, system_name, run_id):
 
     pkg_name = f"ZE2E_{run_id}"
     success, log_msgs, _ = await call_tool_check(
-        mcp_client, "abap_package_create", {
+        mcp_client,
+        "abap_package_create",
+        {
             "name": pkg_name,
             "description": "E2E test package (auto-generated, safe to delete)",
             "package": "$TMP",
             "software_component": "LOCAL",
             "system": system_name,
-        }
+        },
     )
     if success:
         logger.info("Created test package: %s", pkg_name)
         return pkg_name
 
-    logger.warning(
-        "Package creation failed (using $TMP instead): %s", log_msgs
-    )
+    logger.warning("Package creation failed (using $TMP instead): %s", log_msgs)
     return "$TMP"
 
 
@@ -178,7 +182,11 @@ async def session_cleanup(mcp_client, system_name, run_id, package_name):
     yield
     if package_name != "$TMP":
         logger.info("Session cleanup: deleting package %s", package_name)
-        await safe_delete(mcp_client, "abap_package_delete", {
-            "name": package_name,
-            "system": system_name,
-        })
+        await safe_delete(
+            mcp_client,
+            "abap_package_delete",
+            {
+                "name": package_name,
+                "system": system_name,
+            },
+        )

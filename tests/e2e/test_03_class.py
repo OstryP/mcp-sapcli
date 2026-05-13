@@ -3,7 +3,7 @@
 import pytest
 import pytest_asyncio
 
-from .helpers import call_tool_ok, call_tool_check, safe_delete
+from .helpers import call_tool_check, call_tool_ok, safe_delete
 
 
 class TestClassLifecycle:
@@ -22,10 +22,14 @@ class TestClassLifecycle:
     async def cleanup(self, mcp_client, system_name):
         """Delete class after tests."""
         yield
-        await safe_delete(mcp_client, "abap_class_delete", {
-            "name": [self.__class__._class_name],
-            "system": system_name,
-        })
+        await safe_delete(
+            mcp_client,
+            "abap_class_delete",
+            {
+                "name": [self.__class__._class_name],
+                "system": system_name,
+            },
+        )
 
     @pytest.fixture(autouse=True)
     def skip_if_prior_failed(self):
@@ -35,12 +39,16 @@ class TestClassLifecycle:
     async def test_01_create(self, mcp_client, system_name, package_name):
         """Create the class."""
         try:
-            await call_tool_ok(mcp_client, "abap_class_create", {
-                "name": self._class_name,
-                "description": "E2E test class",
-                "package": package_name,
-                "system": system_name,
-            })
+            await call_tool_ok(
+                mcp_client,
+                "abap_class_create",
+                {
+                    "name": self._class_name,
+                    "description": "E2E test class",
+                    "package": package_name,
+                    "system": system_name,
+                },
+            )
         except Exception:
             self.__class__._failed = True
             raise
@@ -60,13 +68,17 @@ class TestClassLifecycle:
             "ENDCLASS.\n"
         )
         try:
-            await call_tool_ok(mcp_client, "abap_class_write", {
-                "name": self._class_name,
-                "source_data": source,
-                "type": "main",
-                "no_check": False,
-                "system": system_name,
-            })
+            await call_tool_ok(
+                mcp_client,
+                "abap_class_write",
+                {
+                    "name": self._class_name,
+                    "source_data": source,
+                    "type": "main",
+                    "no_check": False,
+                    "system": system_name,
+                },
+            )
         except Exception:
             self.__class__._failed = True
             raise
@@ -74,18 +86,22 @@ class TestClassLifecycle:
     async def test_03_write_definitions(self, mcp_client, system_name):
         """Write local definitions (CLASS-DATA, TYPES, etc.)."""
         source = (
-            "*\"* use this source file for any type of declarations (class\n"
-            "*\"* temporary constants, local types and so on) you need for\n"
-            "*\"* method implementations in the private/protected section.\n"
+            '*"* use this source file for any type of declarations (class\n'
+            '*"* temporary constants, local types and so on) you need for\n'
+            '*"* method implementations in the private/protected section.\n'
         )
         try:
-            await call_tool_ok(mcp_client, "abap_class_write", {
-                "name": self._class_name,
-                "source_data": source,
-                "type": "definitions",
-                "no_check": True,
-                "system": system_name,
-            })
+            await call_tool_ok(
+                mcp_client,
+                "abap_class_write",
+                {
+                    "name": self._class_name,
+                    "source_data": source,
+                    "type": "definitions",
+                    "no_check": True,
+                    "system": system_name,
+                },
+            )
         except Exception:
             self.__class__._failed = True
             raise
@@ -109,13 +125,17 @@ class TestClassLifecycle:
             "ENDCLASS.\n"
         )
         try:
-            await call_tool_ok(mcp_client, "abap_class_write", {
-                "name": self._class_name,
-                "source_data": source,
-                "type": "testclasses",
-                "no_check": True,
-                "system": system_name,
-            })
+            await call_tool_ok(
+                mcp_client,
+                "abap_class_write",
+                {
+                    "name": self._class_name,
+                    "source_data": source,
+                    "type": "testclasses",
+                    "no_check": True,
+                    "system": system_name,
+                },
+            )
         except Exception:
             self.__class__._failed = True
             raise
@@ -123,10 +143,14 @@ class TestClassLifecycle:
     async def test_05_activate(self, mcp_client, system_name):
         """Activate the class."""
         try:
-            await call_tool_ok(mcp_client, "abap_class_activate", {
-                "name": [self._class_name],
-                "system": system_name,
-            })
+            await call_tool_ok(
+                mcp_client,
+                "abap_class_activate",
+                {
+                    "name": [self._class_name],
+                    "system": system_name,
+                },
+            )
         except Exception:
             self.__class__._failed = True
             raise
@@ -134,11 +158,15 @@ class TestClassLifecycle:
     async def test_06_read_main(self, mcp_client, system_name):
         """Read back main source."""
         try:
-            content = await call_tool_ok(mcp_client, "abap_class_read", {
-                "name": self._class_name,
-                "type": "main",
-                "system": system_name,
-            })
+            content = await call_tool_ok(
+                mcp_client,
+                "abap_class_read",
+                {
+                    "name": self._class_name,
+                    "type": "main",
+                    "system": system_name,
+                },
+            )
             assert "get_value" in content
         except Exception:
             self.__class__._failed = True
@@ -147,11 +175,15 @@ class TestClassLifecycle:
     async def test_07_read_testclasses(self, mcp_client, system_name):
         """Read back test class source."""
         try:
-            content = await call_tool_ok(mcp_client, "abap_class_read", {
-                "name": self._class_name,
-                "type": "testclasses",
-                "system": system_name,
-            })
+            content = await call_tool_ok(
+                mcp_client,
+                "abap_class_read",
+                {
+                    "name": self._class_name,
+                    "type": "testclasses",
+                    "system": system_name,
+                },
+            )
             assert "ltcl_test" in content
         except Exception:
             self.__class__._failed = True
@@ -160,12 +192,17 @@ class TestClassLifecycle:
     async def test_08_run_aunit(self, mcp_client, system_name):
         """Run AUnit tests on the class."""
         import re
+
         try:
-            content = await call_tool_ok(mcp_client, "abap_aunit_run", {
-                "type": "class",
-                "name": self._class_name,
-                "system": system_name,
-            })
+            content = await call_tool_ok(
+                mcp_client,
+                "abap_aunit_run",
+                {
+                    "type": "class",
+                    "name": self._class_name,
+                    "system": system_name,
+                },
+            )
             match = re.search(r"Successful:\s*(\d+)", content)
             assert match, f"AUnit output missing 'Successful: N': {content[:300]}"
             count = int(match.group(1))
@@ -177,24 +214,34 @@ class TestClassLifecycle:
     async def test_09_run_atc(self, mcp_client, system_name):
         """Run ATC checks (non-fatal — may not be configured on sandbox)."""
         success, log_msgs, _ = await call_tool_check(
-            mcp_client, "abap_atc_run", {
+            mcp_client,
+            "abap_atc_run",
+            {
                 "type": "class",
                 "name": self._class_name,
                 "system": system_name,
-            }
+            },
         )
         if not success:
             pytest.skip(f"ATC not configured on this system: {log_msgs}")
 
     async def test_10_delete(self, mcp_client, system_name):
         """Delete the class and verify it's gone."""
-        await call_tool_ok(mcp_client, "abap_class_delete", {
-            "name": [self._class_name],
-            "system": system_name,
-        })
-        success, _, _ = await call_tool_check(mcp_client, "abap_class_read", {
-            "name": self._class_name,
-            "type": "main",
-            "system": system_name,
-        })
+        await call_tool_ok(
+            mcp_client,
+            "abap_class_delete",
+            {
+                "name": [self._class_name],
+                "system": system_name,
+            },
+        )
+        success, _, _ = await call_tool_check(
+            mcp_client,
+            "abap_class_read",
+            {
+                "name": self._class_name,
+                "type": "main",
+                "system": system_name,
+            },
+        )
         assert not success, "Class should not exist after deletion"
