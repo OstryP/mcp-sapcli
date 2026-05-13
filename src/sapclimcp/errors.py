@@ -33,8 +33,10 @@ def format_auth_error(
     if auth_type == 'cookie':
         cause = "The SSO cookie has likely expired."
         action = (
-            "Refresh the SSO cookie and restart the MCP server. "
-            "If using $ENV_VAR in config, ensure the variable contains a fresh cookie value."
+            "Refresh the SSO cookie. "
+            "If using keyring: run `sapcli-mcp credential set <key> <fresh-cookie>`. "
+            "If using $ENV_VAR, ensure the variable contains a fresh cookie value "
+            "and restart the server."
         )
     else:
         cause = "Invalid username or password, or the account is locked."

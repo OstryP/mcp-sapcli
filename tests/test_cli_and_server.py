@@ -2,12 +2,14 @@
 
 import asyncio
 import os
+from io import StringIO
 from unittest.mock import patch, MagicMock
 
 import pytest
 
 from sapclimcp.server import create_mcp_server, VERIFIED_COMMANDS
 from sapclimcp.cli import parse_args, main
+from sapclimcp.config import KEYRING_SERVICE
 from sapclimcp.errors import ConfigError
 
 
@@ -184,3 +186,94 @@ class TestCliMain:
         msg = str(exc_info.value)
         assert "sapcli is not installed" in msg
         assert "uv pip install" in msg
+
+
+# ---------------------------------------------------------------------------
+# Credential CLI subcommand
+# ---------------------------------------------------------------------------
+
+
+class TestCliCredential:
+    """Tests for sapcli-mcp credential set/get/delete."""
+
+    def test_parse_credential_set(self):
+        args = parse_args(['credential', 'set', 'MY_KEY', 'my_value'])
+        assert args.command == 'credential'
+        assert args.cred_action == 'set'
+        assert args.key == 'MY_KEY'
+        assert args.value == 'my_value'
+
+    def test_parse_credential_set_no_value(self):
+        args = parse_args(['credential', 'set', 'MY_KEY'])
+        assert args.value is None
+
+    def test_parse_credential_get(self):
+        args = parse_args(['credential', 'get', 'MY_KEY'])
+        assert args.command == 'credential'
+        assert args.cred_action == 'get'
+        assert args.key == 'MY_KEY'
+
+    def test_parse_credential_delete(self):
+        args = parse_args(['credential', 'delete', 'MY_KEY'])
+        assert args.command == 'credential'
+        assert args.cred_action == 'delete'
+        assert args.key == 'MY_KEY'
+
+    @patch('sapclimcp.cli.keyring')
+    def test_credential_set(self, mock_keyring, capsys):
+        main(['credential', 'set', 'TEST_KEY', 'test_value'])
+        mock_keyring.set_password.assert_called_once_with(
+            KEYRING_SERVICE, 'TEST_KEY', 'test_value'
+        )
+        assert 'Stored credential: TEST_KEY' in capsys.readouterr().out
+
+    @patch('sapclimcp.cli.keyring')
+    def test_credential_set_from_stdin(self, mock_keyring, capsys, monkeypatch):
+        monkeypatch.setattr('sys.stdin', StringIO('stdin_value\n'))
+        main(['credential', 'set', 'TEST_KEY'])
+        mock_keyring.set_password.assert_called_once_with(
+            KEYRING_SERVICE, 'TEST_KEY', 'stdin_value'
+        )
+
+    @patch('sapclimcp.cli.keyring')
+    def test_credential_set_empty_exits(self, mock_keyring, monkeypatch):
+        monkeypatch.setattr('sys.stdin', StringIO(''))
+        with pytest.raises(SystemExit) as exc_info:
+            main(['credential', 'set', 'TEST_KEY'])
+        assert exc_info.value.code == 1
+        mock_keyring.set_password.assert_not_called()
+
+    @patch('sapclimcp.cli.keyring')
+    def test_credential_get_found(self, mock_keyring, capsys):
+        mock_keyring.get_password.return_value = 'found_value'
+        main(['credential', 'get', 'TEST_KEY'])
+        mock_keyring.get_password.assert_called_once_with(KEYRING_SERVICE, 'TEST_KEY')
+        assert 'found_value' in capsys.readouterr().out
+
+    @patch('sapclimcp.cli.keyring')
+    def test_credential_get_missing_exits(self, mock_keyring):
+        mock_keyring.get_password.return_value = None
+        with pytest.raises(SystemExit) as exc_info:
+            main(['credential', 'get', 'MISSING_KEY'])
+        assert exc_info.value.code == 1
+
+    @patch('sapclimcp.cli.keyring')
+    def test_credential_delete_found(self, mock_keyring, capsys):
+        main(['credential', 'delete', 'TEST_KEY'])
+        mock_keyring.delete_password.assert_called_once_with(KEYRING_SERVICE, 'TEST_KEY')
+        assert 'Deleted credential: TEST_KEY' in capsys.readouterr().out
+
+    @patch('sapclimcp.cli.keyring')
+    def test_credential_delete_missing_exits(self, mock_keyring):
+        import keyring.errors as kr_errors
+        mock_keyring.errors = kr_errors
+        mock_keyring.delete_password.side_effect = \
+            kr_errors.PasswordDeleteError('not found')
+        with pytest.raises(SystemExit) as exc_info:
+            main(['credential', 'delete', 'MISSING_KEY'])
+        assert exc_info.value.code == 1
+
+    def test_credential_no_action_exits(self):
+        with pytest.raises(SystemExit) as exc_info:
+            main(['credential'])
+        assert exc_info.value.code == 1
