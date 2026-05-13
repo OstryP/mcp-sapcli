@@ -13,7 +13,7 @@ from sapclimcp.server import create_mcp_server
 
 def _credential_set(args: argparse.Namespace) -> None:
     """Store a credential in the OS keyring."""
-    value = args.value if args.value else sys.stdin.readline().rstrip('\n')
+    value = args.value if args.value is not None else sys.stdin.readline().rstrip('\r\n')
     if not value:
         print("No value provided (pass as argument or pipe via stdin)", file=sys.stderr)
         sys.exit(1)

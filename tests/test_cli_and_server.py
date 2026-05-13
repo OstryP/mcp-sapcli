@@ -238,8 +238,9 @@ class TestCliCredential:
     @patch('sapclimcp.cli.keyring')
     def test_credential_set_empty_exits(self, mock_keyring, monkeypatch):
         monkeypatch.setattr('sys.stdin', StringIO(''))
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc_info:
             main(['credential', 'set', 'TEST_KEY'])
+        assert exc_info.value.code == 1
         mock_keyring.set_password.assert_not_called()
 
     @patch('sapclimcp.cli.keyring')
@@ -252,8 +253,9 @@ class TestCliCredential:
     @patch('sapclimcp.cli.keyring')
     def test_credential_get_missing_exits(self, mock_keyring):
         mock_keyring.get_password.return_value = None
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc_info:
             main(['credential', 'get', 'MISSING_KEY'])
+        assert exc_info.value.code == 1
 
     @patch('sapclimcp.cli.keyring')
     def test_credential_delete_found(self, mock_keyring, capsys):
@@ -263,13 +265,15 @@ class TestCliCredential:
 
     @patch('sapclimcp.cli.keyring')
     def test_credential_delete_missing_exits(self, mock_keyring):
-        import keyring.errors
-        mock_keyring.errors = keyring.errors
+        import keyring.errors as kr_errors
+        mock_keyring.errors = kr_errors
         mock_keyring.delete_password.side_effect = \
-            keyring.errors.PasswordDeleteError('not found')
-        with pytest.raises(SystemExit):
+            kr_errors.PasswordDeleteError('not found')
+        with pytest.raises(SystemExit) as exc_info:
             main(['credential', 'delete', 'MISSING_KEY'])
+        assert exc_info.value.code == 1
 
     def test_credential_no_action_exits(self):
-        with pytest.raises(SystemExit):
+        with pytest.raises(SystemExit) as exc_info:
             main(['credential'])
+        assert exc_info.value.code == 1
