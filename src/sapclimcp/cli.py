@@ -4,23 +4,25 @@ import argparse
 import os
 import sys
 
+import keyring
+
+from sapclimcp.config import KEYRING_SERVICE
 from sapclimcp.errors import format_startup_error
 from sapclimcp.server import create_mcp_server
 
 
-KEYRING_SERVICE = 'sapcli-mcp'
-
-
 def _credential_set(args: argparse.Namespace) -> None:
     """Store a credential in the OS keyring."""
-    import keyring
-    keyring.set_password(KEYRING_SERVICE, args.key, args.value)
+    value = args.value if args.value else sys.stdin.readline().rstrip('\n')
+    if not value:
+        print("No value provided (pass as argument or pipe via stdin)", file=sys.stderr)
+        sys.exit(1)
+    keyring.set_password(KEYRING_SERVICE, args.key, value)
     print(f"Stored credential: {args.key}")
 
 
 def _credential_get(args: argparse.Namespace) -> None:
     """Retrieve a credential from the OS keyring."""
-    import keyring
     value = keyring.get_password(KEYRING_SERVICE, args.key)
     if value is None:
         print(f"No credential found for key: {args.key}", file=sys.stderr)
@@ -30,7 +32,6 @@ def _credential_get(args: argparse.Namespace) -> None:
 
 def _credential_delete(args: argparse.Namespace) -> None:
     """Delete a credential from the OS keyring."""
-    import keyring
     try:
         keyring.delete_password(KEYRING_SERVICE, args.key)
         print(f"Deleted credential: {args.key}")
@@ -55,7 +56,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     set_parser = cred_sub.add_parser('set', help='Store a credential')
     set_parser.add_argument('key', help='Credential key (e.g. I7D, SBX.password)')
-    set_parser.add_argument('value', help='Credential value')
+    set_parser.add_argument('value', nargs='?', default=None,
+                            help='Credential value (read from stdin if omitted)')
 
     get_parser = cred_sub.add_parser('get', help='Retrieve a credential')
     get_parser.add_argument('key', help='Credential key')

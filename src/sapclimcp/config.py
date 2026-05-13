@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from types import SimpleNamespace
 from typing import Any, Optional
 
+import keyring
 import requests
 
 import sap.adt
@@ -55,7 +56,6 @@ class SecretRef:
         """Resolve the reference to its current value."""
         if self.raw.startswith('keyring:'):
             key = self.raw[len('keyring:'):]
-            import keyring
             value = keyring.get_password(KEYRING_SERVICE, key)
             if value is None:
                 raise ConfigError(
@@ -83,7 +83,7 @@ class SecretRef:
 
     def __repr__(self) -> str:
         if self.raw.startswith('keyring:'):
-            return f"SecretRef('keyring:***')"
+            return "SecretRef('keyring:***')"
         if _ENV_VAR_RE.match(self.raw):
             return f"SecretRef('{self.raw}')"
         return "SecretRef('***')" if self.raw else "SecretRef('')"

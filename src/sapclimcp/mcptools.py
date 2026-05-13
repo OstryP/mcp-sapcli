@@ -353,7 +353,10 @@ class SapcliCommandTool(Tool):
         # by ConnectionPatch. Since ConnectionPatch removes these from the
         # schema, parse_args never sets them — unconditional setattr is safe.
         if self.connection_manager is not None:
-            conn_params = self.connection_manager.get_connection_params(system)
+            try:
+                conn_params = self.connection_manager.get_connection_params(system)
+            except ConfigError as ex:
+                raise SapcliCommandToolError(str(ex))
             for key, value in conn_params.items():
                 setattr(cmd_args, key, value)
 

@@ -82,6 +82,7 @@ class TestSecretRef:
     def test_repr_hides_keyring_key(self):
         r = repr(SecretRef('keyring:I7D'))
         assert 'keyring:***' in r
+        assert 'I7D' not in r
 
     def test_repr_empty(self):
         assert repr(SecretRef('')) == "SecretRef('')"
@@ -409,6 +410,9 @@ class TestConnectionManager:
         mock_keyring.return_value = 'fresh_cookie_value'
 
         mgr = self._make_manager(auth='cookie', cookie='keyring:I7D')
+        # Keyring should NOT have been consulted yet (deferred resolution)
+        assert mock_keyring.call_count == 0
+
         mgr.get_connection('DEV', 'adt')
 
         mock_keyring.assert_called_once_with(KEYRING_SERVICE, 'I7D')
@@ -433,6 +437,13 @@ class TestConnectionManager:
         mgr.get_connection('DEV', 'adt')
 
         assert mock_keyring.call_count == 2
+        # Verify second connection used the fresh cookie
+        second_call_kwargs = mock_conn_cls.call_args_list[1].kwargs
+        initializer = second_call_kwargs['session_initializer']
+        import requests as req
+        session = req.Session()
+        initializer.initialize_session(session)
+        assert session.headers['Cookie'] == 'new_cookie'
 
 
 # ---------------------------------------------------------------------------

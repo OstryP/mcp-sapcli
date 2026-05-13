@@ -41,15 +41,29 @@ Create a config file (`sapcli-mcp.json`) with your SAP system definitions:
       "ssl": true,
       "verify": false,
       "auth": "cookie",
-      "cookie": "$SAP_COOKIE_DEV"
+      "cookie": "keyring:DEV"
     }
   },
   "default_system": "DEV"
 }
 ```
 
-Values starting with `$` are resolved from environment variables at startup.
-This lets you commit the config file while keeping secrets in the environment.
+Credential fields (`user`, `password`, `cookie`) support three resolution modes,
+all resolved lazily at connection time (not at startup):
+
+| Syntax | Resolves via | Example |
+|--------|-------------|---------|
+| `keyring:<key>` | OS keyring (Windows Credential Manager, macOS Keychain, Linux Secret Service) | `"keyring:DEV"` |
+| `$ENV_VAR` | Environment variable | `"$SAP_COOKIE_DEV"` |
+| literal | Used as-is | `"Welcome1!"` |
+
+Manage keyring credentials with the built-in CLI:
+
+```bash
+sapcli-mcp credential set DEV "SAP_SESSIONID=abc123; sap-usercontext=sap-client=001"
+sapcli-mcp credential get DEV
+sapcli-mcp credential delete DEV
+```
 
 Auth types:
 - `"basic"` (default) — uses `user` and `password` fields
@@ -58,7 +72,7 @@ Auth types:
 Start the server in **stdio** mode (for Claude Code / MCP clients):
 
 ```bash
-SAP_COOKIE_DEV="sap-usercontext=..." sapcli-mcp --stdio --config sapcli-mcp.json
+sapcli-mcp --stdio --config sapcli-mcp.json
 ```
 
 With this setup, **credentials are never visible to the LLM**. Tools only
