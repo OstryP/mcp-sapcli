@@ -449,7 +449,7 @@ class ConnectionManager:
             )
 
         sys_config = self._resolve_system(system_name)
-        resolved_name = system_name or self._config.default_system
+        resolved_name = system_name or self._config.default_system or ''
 
         cache_key = (resolved_name, conn_type)
         entry = self._cache.get(cache_key)
