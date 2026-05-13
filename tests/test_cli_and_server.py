@@ -241,7 +241,10 @@ class TestCliMain:
         main(["--stdio"])
 
         mock_basic.assert_called_once()
-        assert mock_basic.call_args.kwargs["level"] == logging.WARNING
+        kwargs = mock_basic.call_args.kwargs
+        assert kwargs["level"] == logging.WARNING
+        assert kwargs["stream"] is sys.stderr
+        assert kwargs["force"] is True
 
     @patch("sapclimcp.cli.logging.basicConfig")
     @patch("sapclimcp.cli.create_mcp_server")

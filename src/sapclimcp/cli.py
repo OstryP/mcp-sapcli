@@ -11,6 +11,8 @@ from sapclimcp.config import KEYRING_SERVICE
 from sapclimcp.errors import format_startup_error
 from sapclimcp.server import create_mcp_server
 
+_VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+
 
 def _credential_set(args: argparse.Namespace) -> None:
     """Store a credential in the OS keyring."""
@@ -114,9 +116,8 @@ def main(argv: list[str] | None = None):
     args = parse_args(argv)
 
     # Configure logging early so it applies to all code paths
-    _VALID_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
     env_level = os.environ.get("SAPCLI_MCP_LOG_LEVEL", "").upper()
-    log_level = args.log_level or (env_level if env_level in _VALID_LEVELS else None)
+    log_level = args.log_level or (env_level if env_level in _VALID_LOG_LEVELS else None)
     if log_level:
         logging.basicConfig(
             level=getattr(logging, log_level),
@@ -124,6 +125,10 @@ def main(argv: list[str] | None = None):
             stream=sys.stderr,
             force=True,
         )
+        if getattr(args, "stdio", False) and log_level == "DEBUG":
+            logging.getLogger(__name__).debug(
+                "DEBUG logging active on stderr — may be visible to MCP client in stdio mode"
+            )
 
     # Handle credential subcommand
     if args.command == "credential":
