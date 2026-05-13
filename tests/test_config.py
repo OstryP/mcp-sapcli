@@ -345,6 +345,8 @@ class TestConnectionManager:
 
         assert conn is not None
         mock_conn_cls.assert_called_once()
+        # Verify it resolved to the default system's host
+        assert mock_conn_cls.call_args.kwargs["host"] == "test.example.com"
 
     def test_unknown_system_raises(self):
         mgr = self._make_manager()
