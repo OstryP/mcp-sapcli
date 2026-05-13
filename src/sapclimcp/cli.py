@@ -1,6 +1,7 @@
 """CLI entry point for the sapcli MCP server."""
 
 import argparse
+import logging
 import os
 import sys
 
@@ -97,6 +98,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Port to listen on (default: 8000, HTTP mode only)",
     )
 
+    parser.add_argument(
+        "--log-level",
+        default=None,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Set logging level (output goes to stderr)",
+    )
+
     return parser.parse_args(argv)
 
 
@@ -118,6 +126,13 @@ def main(argv: list[str] | None = None):
         return
 
     config_path = args.config or os.environ.get("SAPCLI_MCP_CONFIG")
+
+    if args.log_level:
+        logging.basicConfig(
+            level=getattr(logging, args.log_level),
+            format="%(asctime)s %(name)s %(levelname)s %(message)s",
+            stream=sys.stderr,
+        )
 
     try:
         server = create_mcp_server(
