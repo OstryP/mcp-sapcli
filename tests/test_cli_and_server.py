@@ -22,6 +22,19 @@ class TestParseArgs:
         assert args.stdio is False
         assert args.host == "127.0.0.1"
         assert args.port == 8000
+        assert args.log_level is None
+
+    def test_log_level_valid(self):
+        args = parse_args(["--log-level", "DEBUG"])
+        assert args.log_level == "DEBUG"
+
+    def test_log_level_case_insensitive(self):
+        args = parse_args(["--log-level", "debug"])
+        assert args.log_level == "DEBUG"
+
+    def test_log_level_invalid(self):
+        with pytest.raises(SystemExit):
+            parse_args(["--log-level", "VERBOSE"])
 
     def test_experimental(self):
         args = parse_args(["--experimental"])
@@ -183,6 +196,50 @@ class TestCliMain:
         msg = str(exc_info.value)
         assert "sapcli is not installed" in msg
         assert "uv pip install" in msg
+
+    @patch("sapclimcp.cli.logging.basicConfig")
+    @patch("sapclimcp.cli.create_mcp_server")
+    def test_main_log_level_calls_basicConfig(self, mock_create, mock_basic, monkeypatch):
+        monkeypatch.delenv("SAPCLI_MCP_CONFIG", raising=False)
+        monkeypatch.delenv("SAPCLI_MCP_LOG_LEVEL", raising=False)
+        mock_server = MagicMock()
+        mock_create.return_value = mock_server
+
+        import logging
+
+        main(["--stdio", "--log-level", "DEBUG"])
+
+        mock_basic.assert_called_once()
+        kwargs = mock_basic.call_args.kwargs
+        assert kwargs["level"] == logging.DEBUG
+        assert kwargs["force"] is True
+
+    @patch("sapclimcp.cli.logging.basicConfig")
+    @patch("sapclimcp.cli.create_mcp_server")
+    def test_main_no_log_level_skips_basicConfig(self, mock_create, mock_basic, monkeypatch):
+        monkeypatch.delenv("SAPCLI_MCP_CONFIG", raising=False)
+        monkeypatch.delenv("SAPCLI_MCP_LOG_LEVEL", raising=False)
+        mock_server = MagicMock()
+        mock_create.return_value = mock_server
+
+        main(["--stdio"])
+
+        mock_basic.assert_not_called()
+
+    @patch("sapclimcp.cli.logging.basicConfig")
+    @patch("sapclimcp.cli.create_mcp_server")
+    def test_main_log_level_from_env(self, mock_create, mock_basic, monkeypatch):
+        monkeypatch.delenv("SAPCLI_MCP_CONFIG", raising=False)
+        monkeypatch.setenv("SAPCLI_MCP_LOG_LEVEL", "warning")
+        mock_server = MagicMock()
+        mock_create.return_value = mock_server
+
+        import logging
+
+        main(["--stdio"])
+
+        mock_basic.assert_called_once()
+        assert mock_basic.call_args.kwargs["level"] == logging.WARNING
 
 
 # ---------------------------------------------------------------------------

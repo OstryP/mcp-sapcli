@@ -101,8 +101,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--log-level",
         default=None,
-        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        help="Set logging level (output goes to stderr)",
+        type=str.upper,
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set logging level (output goes to stderr; env: SAPCLI_MCP_LOG_LEVEL)",
     )
 
     return parser.parse_args(argv)
@@ -111,6 +112,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None):
     """Run the sapcli MCP server."""
     args = parse_args(argv)
+
+    # Configure logging early so it applies to all code paths
+    log_level = args.log_level or os.environ.get("SAPCLI_MCP_LOG_LEVEL", "").upper() or None
+    if log_level:
+        # choices= guarantees a valid logging constant name
+        logging.basicConfig(
+            level=getattr(logging, log_level),
+            format="%(asctime)s %(name)s %(levelname)s %(message)s",
+            stream=sys.stderr,
+            force=True,
+        )
 
     # Handle credential subcommand
     if args.command == "credential":
@@ -126,13 +138,6 @@ def main(argv: list[str] | None = None):
         return
 
     config_path = args.config or os.environ.get("SAPCLI_MCP_CONFIG")
-
-    if args.log_level:
-        logging.basicConfig(
-            level=getattr(logging, args.log_level),
-            format="%(asctime)s %(name)s %(levelname)s %(message)s",
-            stream=sys.stderr,
-        )
 
     try:
         server = create_mcp_server(
