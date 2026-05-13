@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
 jobs:
   lint:
     name: Lint & Format (ruff)
@@ -14,13 +20,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-
-      - name: Set up Python 3.12
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
 
       - name: Install dependencies
         run: |
@@ -34,20 +40,19 @@ jobs:
         run: uv run ruff format --check src/ tests/
 
   unit-tests:
-    name: Unit Tests · ${{ matrix.os }} · py${{ matrix.python-version }}
+    name: Unit Tests · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.12"]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -58,7 +63,7 @@ jobs:
           uv pip install -e ".[dev]"
 
       - name: Run unit tests
-        run: uv run pytest tests/ --ignore=tests/test_e2e.py -q
+        run: uv run pytest tests/ --ignore=tests/e2e -q
 
   type-check:
     name: Type Safety (mypy)
@@ -67,10 +72,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -83,7 +88,7 @@ jobs:
       - name: Run mypy
         run: uv run mypy src/sapclimcp/ --ignore-missing-imports
 
-  package:
+  install:
     name: Install & Verify · ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -93,10 +98,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.12
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -118,19 +123,9 @@ jobs:
           uv run python -c "from sapclimcp.cli import main; print('cli: OK')"
           uv run python -c "from sapclimcp.server import create_mcp_server; print('server: OK')"
 
-      - name: Credential store/retrieve roundtrip
+      - name: Keyring credential roundtrip (Windows only)
+        if: runner.os == 'Windows'
         run: |
-          uv run python -c "
-          import sys, platform
-          # Only Windows CI has a headless credential store
-          # Linux has no secret service, macOS Keychain needs user interaction
-          if platform.system() != 'Windows':
-              print(f'keyring roundtrip: SKIPPED ({platform.system()} CI has no headless keyring)')
-              sys.exit(0)
-          import keyring
-          keyring.set_password('sapcli-mcp', 'ci-test-key', 'ci-test-value')
-          val = keyring.get_password('sapcli-mcp', 'ci-test-key')
-          assert val == 'ci-test-value', f'Expected ci-test-value, got {val}'
-          print('keyring roundtrip: OK')
-          keyring.delete_password('sapcli-mcp', 'ci-test-key')
-          "
+          uv run sapcli-mcp credential set ci-test-key "ci-test-value"
+          uv run sapcli-mcp credential get ci-test-key
+          uv run sapcli-mcp credential delete ci-test-key

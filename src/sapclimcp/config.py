@@ -376,6 +376,7 @@ class ConnectionManager:
             Dict with 'auth_type', 'host', 'system_name'.
         """
         sys_config = self._resolve_system(system_name)
+        # _resolve_system raises if both are None; "unknown" is for error display only
         resolved_name = system_name or self._config.default_system or "unknown"
         return {
             "auth_type": sys_config.auth,
@@ -438,6 +439,7 @@ class ConnectionManager:
             )
 
         sys_config = self._resolve_system(system_name)
+        # _resolve_system raises if both are None; fallback satisfies type checker
         resolved_name = system_name or self._config.default_system or ""
 
         cache_key = (resolved_name, conn_type)
