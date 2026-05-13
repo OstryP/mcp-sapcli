@@ -38,8 +38,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python-version: ["3.12", "3.13"]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -84,8 +84,11 @@ jobs:
         run: uv run mypy src/sapclimcp/ --ignore-missing-imports
 
   package:
-    name: Install & Import Check
-    runs-on: ubuntu-latest
+    name: Install & Verify · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
       - uses: actions/checkout@v4
@@ -98,19 +101,30 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
-      - name: Build and install package
+      - name: Install package from source
         run: |
           uv venv
           uv pip install .
 
-      - name: Verify CLI entry point
+      - name: CLI entry point works
         run: uv run sapcli-mcp --help
 
-      - name: Verify credential subcommand
+      - name: Credential CLI works
         run: uv run sapcli-mcp credential --help
 
-      - name: Verify package imports
+      - name: All modules importable
         run: |
           uv run python -c "from sapclimcp.config import SecretRef, KEYRING_SERVICE; print('config: OK')"
           uv run python -c "from sapclimcp.cli import main; print('cli: OK')"
           uv run python -c "from sapclimcp.server import create_mcp_server; print('server: OK')"
+
+      - name: Credential store/retrieve roundtrip
+        run: |
+          uv run sapcli-mcp credential set ci-test-key "ci-test-value"
+          uv run python -c "
+          import keyring
+          val = keyring.get_password('sapcli-mcp', 'ci-test-key')
+          assert val == 'ci-test-value', f'Expected ci-test-value, got {val}'
+          print('keyring roundtrip: OK')
+          "
+          uv run sapcli-mcp credential delete ci-test-key
