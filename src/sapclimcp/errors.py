@@ -30,7 +30,7 @@ def format_auth_error(
     if is_retry:
         header += " after retry"
 
-    if auth_type == 'cookie':
+    if auth_type == "cookie":
         cause = "The SSO cookie has likely expired."
         action = (
             "Refresh the SSO cookie. "
@@ -54,7 +54,7 @@ def format_connection_error(
     port: int,
     ssl: bool,
     original_error: Exception,
-    service_type: str = 'ADT',
+    service_type: str = "ADT",
 ) -> list[str]:
     """Format a connection failure with actionable guidance.
 
@@ -103,8 +103,8 @@ def format_startup_error(error: Exception) -> str:
         )
 
     if isinstance(error, ImportError):
-        module = getattr(error, 'name', None) or ''
-        if module == 'sap' or module.startswith('sap.'):
+        module = getattr(error, "name", None) or ""
+        if module == "sap" or module.startswith("sap."):
             return (
                 f"Server startup failed: sapcli is not installed.\n"
                 f"{error}\n"

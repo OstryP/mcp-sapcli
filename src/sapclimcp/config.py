@@ -21,19 +21,17 @@ from typing import Any, Optional
 
 import keyring
 import requests
-
 import sap.adt
 import sap.cli
 from sap.http.errors import UnauthorizedError
 
 from sapclimcp.errors import ConfigError
 
-
 _LOGGER = logging.getLogger(__name__)
 
-_ENV_VAR_RE = re.compile(r'^\$([A-Za-z_][A-Za-z0-9_]*)$')
+_ENV_VAR_RE = re.compile(r"^\$([A-Za-z_][A-Za-z0-9_]*)$")
 
-KEYRING_SERVICE = 'sapcli-mcp'
+KEYRING_SERVICE = "sapcli-mcp"
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,8 +52,8 @@ class SecretRef:
 
     def resolve(self) -> str:
         """Resolve the reference to its current value."""
-        if self.raw.startswith('keyring:'):
-            key = self.raw[len('keyring:'):]
+        if self.raw.startswith("keyring:"):
+            key = self.raw[len("keyring:") :]
             value = keyring.get_password(KEYRING_SERVICE, key)
             if value is None:
                 raise ConfigError(
@@ -70,9 +68,7 @@ class SecretRef:
             var_name = match.group(1)
             value = os.environ.get(var_name)
             if value is None:
-                raise ConfigError(
-                    f"Environment variable '{var_name}' is not set"
-                )
+                raise ConfigError(f"Environment variable '{var_name}' is not set")
             return value
 
         return self.raw
@@ -82,7 +78,7 @@ class SecretRef:
         return bool(self.raw)
 
     def __repr__(self) -> str:
-        if self.raw.startswith('keyring:'):
+        if self.raw.startswith("keyring:"):
             return "SecretRef('keyring:***')"
         if _ENV_VAR_RE.match(self.raw):
             return f"SecretRef('{self.raw}')"
@@ -101,14 +97,14 @@ class CookieSessionInitializer:
 
     def initialize_session(self, session: requests.Session) -> requests.Session:
         session.auth = None
-        session.headers['Cookie'] = self._cookie
+        session.headers["Cookie"] = self._cookie
         return session
 
     def build_unauthorized_error(self, req, res) -> UnauthorizedError:
-        return UnauthorizedError(req, res, 'cookie-auth')
+        return UnauthorizedError(req, res, "cookie-auth")
 
 
-_VALID_AUTH_TYPES = frozenset({'basic', 'cookie'})
+_VALID_AUTH_TYPES = frozenset({"basic", "cookie"})
 
 
 @dataclass
@@ -120,12 +116,12 @@ class SystemConfig:
     port: int = 443
     ssl: bool = True
     verify: bool = True
-    auth: str = 'basic'
+    auth: str = "basic"
 
     # Credential fields — stored as SecretRef for deferred resolution.
-    user: SecretRef = field(default_factory=lambda: SecretRef(''))
-    password: SecretRef = field(default_factory=lambda: SecretRef(''))
-    cookie: SecretRef = field(default_factory=lambda: SecretRef(''))
+    user: SecretRef = field(default_factory=lambda: SecretRef(""))
+    password: SecretRef = field(default_factory=lambda: SecretRef(""))
+    cookie: SecretRef = field(default_factory=lambda: SecretRef(""))
 
     def __post_init__(self) -> None:
         if self.auth not in _VALID_AUTH_TYPES:
@@ -133,14 +129,10 @@ class SystemConfig:
                 f"Invalid auth type '{self.auth}'. "
                 f"Must be one of: {', '.join(sorted(_VALID_AUTH_TYPES))}"
             )
-        if self.auth == 'cookie' and not self.cookie:
-            raise ConfigError(
-                "Cookie auth requires a non-empty 'cookie' field"
-            )
-        if self.auth == 'basic' and not self.user:
-            raise ConfigError(
-                "Basic auth requires a non-empty 'user' field"
-            )
+        if self.auth == "cookie" and not self.cookie:
+            raise ConfigError("Cookie auth requires a non-empty 'cookie' field")
+        if self.auth == "basic" and not self.user:
+            raise ConfigError("Basic auth requires a non-empty 'user' field")
 
 
 @dataclass
@@ -152,7 +144,7 @@ class ServerConfig:
 
     def __post_init__(self) -> None:
         if not self.systems:
-            raise ConfigError('At least one system must be configured')
+            raise ConfigError("At least one system must be configured")
 
         if self.default_system and self.default_system not in self.systems:
             raise ConfigError(
@@ -165,7 +157,7 @@ class ServerConfig:
             self.default_system = next(iter(self.systems))
 
 
-_SECRET_FIELDS = frozenset({'user', 'password', 'cookie'})
+_SECRET_FIELDS = frozenset({"user", "password", "cookie"})
 
 
 def load_config(path: str) -> ServerConfig:
@@ -185,15 +177,15 @@ def load_config(path: str) -> ServerConfig:
     """
 
     try:
-        with open(path, encoding='utf-8') as fobj:
+        with open(path, encoding="utf-8") as fobj:
             raw = json.load(fobj)
     except (OSError, json.JSONDecodeError) as exc:
-        raise ConfigError(f'Failed to load config from {path}: {exc}') from exc
+        raise ConfigError(f"Failed to load config from {path}: {exc}") from exc
 
     if not isinstance(raw, dict):
-        raise ConfigError('Config must be a JSON object')
+        raise ConfigError("Config must be a JSON object")
 
-    raw_systems = raw.get('systems')
+    raw_systems = raw.get("systems")
     if not isinstance(raw_systems, dict):
         raise ConfigError("Config must have a 'systems' object")
 
@@ -211,11 +203,9 @@ def load_config(path: str) -> ServerConfig:
         try:
             systems[name] = SystemConfig(**parsed)
         except (TypeError, ConfigError) as exc:
-            raise ConfigError(
-                f"System '{name}': {exc}"
-            ) from exc
+            raise ConfigError(f"System '{name}': {exc}") from exc
 
-    default_system = raw.get('default_system')
+    default_system = raw.get("default_system")
     if default_system is not None:
         default_system = str(default_system)
 
@@ -256,7 +246,7 @@ class ConnectionManager:
     # Connectable subset — types this manager can actually serve.
     # Broader types (rfc, odata) may be registered on tools but are
     # not yet supported for server-managed connections.
-    _SUPPORTED_CONN_TYPES = frozenset({'adt', 'gcts'})
+    _SUPPORTED_CONN_TYPES = frozenset({"adt", "gcts"})
 
     def __init__(
         self,
@@ -295,15 +285,14 @@ class ConnectionManager:
 
         if system_name is None:
             raise ConfigError(
-                'No system specified and no default_system configured. '
-                f'Available systems: {", ".join(self.system_names)}'
+                "No system specified and no default_system configured. "
+                f"Available systems: {', '.join(self.system_names)}"
             )
 
         sys_config = self._config.systems.get(system_name)
         if sys_config is None:
             raise ConfigError(
-                f"Unknown system '{system_name}'. "
-                f'Available systems: {", ".join(self.system_names)}'
+                f"Unknown system '{system_name}'. Available systems: {', '.join(self.system_names)}"
             )
 
         return sys_config
@@ -325,12 +314,12 @@ class ConnectionManager:
 
         sys_config = self._resolve_system(system_name)
         return {
-            'ashost': sys_config.ashost,
-            'port': sys_config.port,
-            'client': sys_config.client,
-            'user': sys_config.user.resolve() or '',
-            'ssl': sys_config.ssl,
-            'verify': sys_config.verify,
+            "ashost": sys_config.ashost,
+            "port": sys_config.port,
+            "client": sys_config.client,
+            "user": sys_config.user.resolve() or "",
+            "ssl": sys_config.ssl,
+            "verify": sys_config.verify,
         }
 
     def _make_gcts_connection_args(self, sys_config: SystemConfig) -> SimpleNamespace:
@@ -342,8 +331,8 @@ class ConnectionManager:
             port=sys_config.port,
             ssl=sys_config.ssl,
             verify=sys_config.verify,
-            user=sys_config.user.resolve() or 'unused',
-            password=sys_config.password.resolve() or 'unused',
+            user=sys_config.user.resolve() or "unused",
+            password=sys_config.password.resolve() or "unused",
             ssl_server_cert=None,
         )
 
@@ -351,14 +340,14 @@ class ConnectionManager:
         """Create an ADT connection, using session_initializer for cookie auth."""
 
         initializer = None
-        if sys_config.auth == 'cookie':
+        if sys_config.auth == "cookie":
             initializer = CookieSessionInitializer(sys_config.cookie.resolve())
 
         return sap.adt.Connection(
             host=sys_config.ashost,
             client=sys_config.client,
-            user=sys_config.user.resolve() or 'unused',
-            password=sys_config.password.resolve() or 'unused',
+            user=sys_config.user.resolve() or "unused",
+            password=sys_config.password.resolve() or "unused",
             port=sys_config.port,
             ssl=sys_config.ssl,
             verify=sys_config.verify,
@@ -368,10 +357,10 @@ class ConnectionManager:
     def _create_gcts_connection(self, sys_config: SystemConfig) -> Any:
         """Create a gCTS connection."""
 
-        if sys_config.auth == 'cookie':
+        if sys_config.auth == "cookie":
             raise ConfigError(
-                'Cookie auth is not supported for gCTS connections. '
-                'Use basic auth for gCTS systems.'
+                "Cookie auth is not supported for gCTS connections. "
+                "Use basic auth for gCTS systems."
             )
 
         args = self._make_gcts_connection_args(sys_config)
@@ -387,11 +376,11 @@ class ConnectionManager:
             Dict with 'auth_type', 'host', 'system_name'.
         """
         sys_config = self._resolve_system(system_name)
-        resolved_name = system_name or self._config.default_system or 'unknown'
+        resolved_name = system_name or self._config.default_system or "unknown"
         return {
-            'auth_type': sys_config.auth,
-            'host': sys_config.ashost,
-            'system_name': resolved_name,
+            "auth_type": sys_config.auth,
+            "host": sys_config.ashost,
+            "system_name": resolved_name,
         }
 
     def evict(
@@ -449,7 +438,7 @@ class ConnectionManager:
             )
 
         sys_config = self._resolve_system(system_name)
-        resolved_name = system_name or self._config.default_system or ''
+        resolved_name = system_name or self._config.default_system or ""
 
         cache_key = (resolved_name, conn_type)
         entry = self._cache.get(cache_key)
@@ -461,7 +450,7 @@ class ConnectionManager:
                 entry = None
 
         if entry is None:
-            if conn_type == 'adt':
+            if conn_type == "adt":
                 conn = self._create_adt_connection(sys_config)
             else:
                 conn = self._create_gcts_connection(sys_config)

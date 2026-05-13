@@ -13,7 +13,7 @@ from sapclimcp.server import create_mcp_server
 
 def _credential_set(args: argparse.Namespace) -> None:
     """Store a credential in the OS keyring."""
-    value = args.value if args.value is not None else sys.stdin.readline().rstrip('\r\n')
+    value = args.value if args.value is not None else sys.stdin.readline().rstrip("\r\n")
     if not value:
         print("No value provided (pass as argument or pipe via stdin)", file=sys.stderr)
         sys.exit(1)
@@ -42,60 +42,59 @@ def _credential_delete(args: argparse.Namespace) -> None:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="MCP server exposing sapcli commands as tools"
-    )
+    parser = argparse.ArgumentParser(description="MCP server exposing sapcli commands as tools")
 
-    subparsers = parser.add_subparsers(dest='command')
+    subparsers = parser.add_subparsers(dest="command")
 
     # credential subcommand
-    cred_parser = subparsers.add_parser(
-        'credential', help='Manage credentials in the OS keyring'
+    cred_parser = subparsers.add_parser("credential", help="Manage credentials in the OS keyring")
+    cred_sub = cred_parser.add_subparsers(dest="cred_action")
+
+    set_parser = cred_sub.add_parser("set", help="Store a credential")
+    set_parser.add_argument("key", help="Credential key (e.g. I7D, SBX.password)")
+    set_parser.add_argument(
+        "value",
+        nargs="?",
+        default=None,
+        help="Credential value (read from stdin if omitted)",
     )
-    cred_sub = cred_parser.add_subparsers(dest='cred_action')
 
-    set_parser = cred_sub.add_parser('set', help='Store a credential')
-    set_parser.add_argument('key', help='Credential key (e.g. I7D, SBX.password)')
-    set_parser.add_argument('value', nargs='?', default=None,
-                            help='Credential value (read from stdin if omitted)')
+    get_parser = cred_sub.add_parser("get", help="Retrieve a credential")
+    get_parser.add_argument("key", help="Credential key")
 
-    get_parser = cred_sub.add_parser('get', help='Retrieve a credential')
-    get_parser.add_argument('key', help='Credential key')
-
-    del_parser = cred_sub.add_parser('delete', help='Delete a credential')
-    del_parser.add_argument('key', help='Credential key')
+    del_parser = cred_sub.add_parser("delete", help="Delete a credential")
+    del_parser.add_argument("key", help="Credential key")
 
     # server flags (used when no subcommand)
     parser.add_argument(
         "--experimental",
         action="store_true",
-        help="Expose all meaningful sapcli commands as tools (not just verified ones)"
+        help="Expose all meaningful sapcli commands as tools (not just verified ones)",
     )
 
     parser.add_argument(
         "--config",
         default=None,
-        help="Path to JSON config file with system definitions "
-             "(env: SAPCLI_MCP_CONFIG)"
+        help="Path to JSON config file with system definitions (env: SAPCLI_MCP_CONFIG)",
     )
 
     parser.add_argument(
         "--stdio",
         action="store_true",
-        help="Run in stdio transport mode (for Claude Code / MCP clients)"
+        help="Run in stdio transport mode (for Claude Code / MCP clients)",
     )
 
     parser.add_argument(
         "--host",
         default="127.0.0.1",
-        help="Host address to bind to (default: 127.0.0.1, HTTP mode only)"
+        help="Host address to bind to (default: 127.0.0.1, HTTP mode only)",
     )
 
     parser.add_argument(
         "--port",
         type=int,
         default=8000,
-        help="Port to listen on (default: 8000, HTTP mode only)"
+        help="Port to listen on (default: 8000, HTTP mode only)",
     )
 
     return parser.parse_args(argv)
@@ -106,19 +105,19 @@ def main(argv: list[str] | None = None):
     args = parse_args(argv)
 
     # Handle credential subcommand
-    if args.command == 'credential':
-        if args.cred_action == 'set':
+    if args.command == "credential":
+        if args.cred_action == "set":
             _credential_set(args)
-        elif args.cred_action == 'get':
+        elif args.cred_action == "get":
             _credential_get(args)
-        elif args.cred_action == 'delete':
+        elif args.cred_action == "delete":
             _credential_delete(args)
         else:
             print("Usage: sapcli-mcp credential {set|get|delete}", file=sys.stderr)
             sys.exit(1)
         return
 
-    config_path = args.config or os.environ.get('SAPCLI_MCP_CONFIG')
+    config_path = args.config or os.environ.get("SAPCLI_MCP_CONFIG")
 
     try:
         server = create_mcp_server(

@@ -75,13 +75,13 @@ def create_mcp_server(
         Initialized FastMCP server with registered sapcli tools.
     """
     if config_path:
-        from sapclimcp.config import load_config, ConnectionManager
+        from sapclimcp.config import ConnectionManager, load_config
 
         server_config = load_config(config_path)
         connection_manager = ConnectionManager(server_config)
         instructions = MCP_SERVER_INSTRUCTIONS_MANAGED.format(
-            systems=', '.join(connection_manager.system_names),
-            default=connection_manager.default_system or '(none)',
+            systems=", ".join(connection_manager.system_names),
+            default=connection_manager.default_system or "(none)",
         )
     else:
         connection_manager = None

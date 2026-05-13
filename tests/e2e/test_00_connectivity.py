@@ -2,7 +2,7 @@
 
 import pytest
 
-from .helpers import call_tool_ok, call_tool_check
+from .helpers import call_tool_check, call_tool_ok
 
 
 class TestConnectivity:
@@ -30,10 +30,12 @@ class TestConnectivity:
         """Verify $TMP is listable (basic ADT connectivity check)."""
         try:
             content = await call_tool_ok(
-                mcp_client, "abap_package_list", {
+                mcp_client,
+                "abap_package_list",
+                {
                     "name": "$TMP",
                     "system": system_name,
-                }
+                },
             )
             # $TMP always exists — call_tool_ok guarantees success
             assert content  # non-empty response

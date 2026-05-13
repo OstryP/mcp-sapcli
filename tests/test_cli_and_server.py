@@ -1,16 +1,15 @@
 """Tests for sapclimcp.server and sapclimcp.cli."""
 
 import asyncio
-import os
 from io import StringIO
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from sapclimcp.server import create_mcp_server, VERIFIED_COMMANDS
-from sapclimcp.cli import parse_args, main
+from sapclimcp.cli import main, parse_args
 from sapclimcp.config import KEYRING_SERVICE
 from sapclimcp.errors import ConfigError
+from sapclimcp.server import VERIFIED_COMMANDS, create_mcp_server
 
 
 class TestParseArgs:
@@ -70,9 +69,9 @@ class TestCreateMcpServer:
 class TestCliMain:
     """Tests for cli.main()."""
 
-    @patch('sapclimcp.cli.create_mcp_server')
+    @patch("sapclimcp.cli.create_mcp_server")
     def test_main_stdio(self, mock_create, monkeypatch):
-        monkeypatch.delenv('SAPCLI_MCP_CONFIG', raising=False)
+        monkeypatch.delenv("SAPCLI_MCP_CONFIG", raising=False)
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
@@ -84,9 +83,9 @@ class TestCliMain:
         )
         mock_server.run.assert_called_once_with(transport="stdio")
 
-    @patch('sapclimcp.cli.create_mcp_server')
+    @patch("sapclimcp.cli.create_mcp_server")
     def test_main_http(self, mock_create, monkeypatch):
-        monkeypatch.delenv('SAPCLI_MCP_CONFIG', raising=False)
+        monkeypatch.delenv("SAPCLI_MCP_CONFIG", raising=False)
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
@@ -96,11 +95,9 @@ class TestCliMain:
             experimental=False,
             config_path=None,
         )
-        mock_server.run.assert_called_once_with(
-            transport="http", host="0.0.0.0", port=9000
-        )
+        mock_server.run.assert_called_once_with(transport="http", host="0.0.0.0", port=9000)
 
-    @patch('sapclimcp.cli.create_mcp_server')
+    @patch("sapclimcp.cli.create_mcp_server")
     def test_main_experimental_with_config(self, mock_create):
         mock_server = MagicMock()
         mock_create.return_value = mock_server
@@ -112,12 +109,12 @@ class TestCliMain:
             config_path="my.json",
         )
 
-    @patch('sapclimcp.cli.create_mcp_server')
+    @patch("sapclimcp.cli.create_mcp_server")
     def test_main_config_from_env(self, mock_create, monkeypatch):
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
-        monkeypatch.setenv('SAPCLI_MCP_CONFIG', '/env/config.json')
+        monkeypatch.setenv("SAPCLI_MCP_CONFIG", "/env/config.json")
         main(["--stdio"])
 
         mock_create.assert_called_once_with(
@@ -125,13 +122,13 @@ class TestCliMain:
             config_path="/env/config.json",
         )
 
-    @patch('sapclimcp.cli.create_mcp_server')
+    @patch("sapclimcp.cli.create_mcp_server")
     def test_cli_arg_takes_precedence_over_env(self, mock_create, monkeypatch):
         """CLI --config flag takes priority over SAPCLI_MCP_CONFIG env var."""
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
-        monkeypatch.setenv('SAPCLI_MCP_CONFIG', '/env/config.json')
+        monkeypatch.setenv("SAPCLI_MCP_CONFIG", "/env/config.json")
         main(["--stdio", "--config", "explicit.json"])
 
         mock_create.assert_called_once_with(
@@ -139,7 +136,7 @@ class TestCliMain:
             config_path="explicit.json",
         )
 
-    @patch('sapclimcp.cli.create_mcp_server')
+    @patch("sapclimcp.cli.create_mcp_server")
     def test_main_exits_on_config_error(self, mock_create):
         mock_create.side_effect = ConfigError("bad config")
 
@@ -150,7 +147,7 @@ class TestCliMain:
         assert "configuration error" in msg
         assert "bad config" in msg
 
-    @patch('sapclimcp.cli.create_mcp_server')
+    @patch("sapclimcp.cli.create_mcp_server")
     def test_main_exits_on_unexpected_error(self, mock_create):
         """Unexpected exceptions produce actionable error instead of traceback."""
         mock_create.side_effect = RuntimeError("something broke")
@@ -163,10 +160,10 @@ class TestCliMain:
         assert "RuntimeError" in msg
         assert "something broke" in msg
 
-    @patch('sapclimcp.cli.create_mcp_server')
+    @patch("sapclimcp.cli.create_mcp_server")
     def test_main_exits_on_import_error(self, mock_create):
         """Generic ImportError produces guidance about installing dependencies."""
-        mock_create.side_effect = ImportError("No module named 'foo'", name='foo')
+        mock_create.side_effect = ImportError("No module named 'foo'", name="foo")
 
         with pytest.raises(SystemExit) as exc_info:
             main(["--stdio"])
@@ -175,10 +172,10 @@ class TestCliMain:
         assert "missing dependency" in msg
         assert "sapcli is not installed" not in msg
 
-    @patch('sapclimcp.cli.create_mcp_server')
+    @patch("sapclimcp.cli.create_mcp_server")
     def test_main_exits_on_sapcli_import_error(self, mock_create):
         """ImportError for sap.* produces sapcli-specific install guidance."""
-        mock_create.side_effect = ImportError("No module named 'sap'", name='sap')
+        mock_create.side_effect = ImportError("No module named 'sap'", name="sap")
 
         with pytest.raises(SystemExit) as exc_info:
             main(["--stdio"])
@@ -197,83 +194,81 @@ class TestCliCredential:
     """Tests for sapcli-mcp credential set/get/delete."""
 
     def test_parse_credential_set(self):
-        args = parse_args(['credential', 'set', 'MY_KEY', 'my_value'])
-        assert args.command == 'credential'
-        assert args.cred_action == 'set'
-        assert args.key == 'MY_KEY'
-        assert args.value == 'my_value'
+        args = parse_args(["credential", "set", "MY_KEY", "my_value"])
+        assert args.command == "credential"
+        assert args.cred_action == "set"
+        assert args.key == "MY_KEY"
+        assert args.value == "my_value"
 
     def test_parse_credential_set_no_value(self):
-        args = parse_args(['credential', 'set', 'MY_KEY'])
+        args = parse_args(["credential", "set", "MY_KEY"])
         assert args.value is None
 
     def test_parse_credential_get(self):
-        args = parse_args(['credential', 'get', 'MY_KEY'])
-        assert args.command == 'credential'
-        assert args.cred_action == 'get'
-        assert args.key == 'MY_KEY'
+        args = parse_args(["credential", "get", "MY_KEY"])
+        assert args.command == "credential"
+        assert args.cred_action == "get"
+        assert args.key == "MY_KEY"
 
     def test_parse_credential_delete(self):
-        args = parse_args(['credential', 'delete', 'MY_KEY'])
-        assert args.command == 'credential'
-        assert args.cred_action == 'delete'
-        assert args.key == 'MY_KEY'
+        args = parse_args(["credential", "delete", "MY_KEY"])
+        assert args.command == "credential"
+        assert args.cred_action == "delete"
+        assert args.key == "MY_KEY"
 
-    @patch('sapclimcp.cli.keyring')
+    @patch("sapclimcp.cli.keyring")
     def test_credential_set(self, mock_keyring, capsys):
-        main(['credential', 'set', 'TEST_KEY', 'test_value'])
-        mock_keyring.set_password.assert_called_once_with(
-            KEYRING_SERVICE, 'TEST_KEY', 'test_value'
-        )
-        assert 'Stored credential: TEST_KEY' in capsys.readouterr().out
+        main(["credential", "set", "TEST_KEY", "test_value"])
+        mock_keyring.set_password.assert_called_once_with(KEYRING_SERVICE, "TEST_KEY", "test_value")
+        assert "Stored credential: TEST_KEY" in capsys.readouterr().out
 
-    @patch('sapclimcp.cli.keyring')
+    @patch("sapclimcp.cli.keyring")
     def test_credential_set_from_stdin(self, mock_keyring, capsys, monkeypatch):
-        monkeypatch.setattr('sys.stdin', StringIO('stdin_value\n'))
-        main(['credential', 'set', 'TEST_KEY'])
+        monkeypatch.setattr("sys.stdin", StringIO("stdin_value\n"))
+        main(["credential", "set", "TEST_KEY"])
         mock_keyring.set_password.assert_called_once_with(
-            KEYRING_SERVICE, 'TEST_KEY', 'stdin_value'
+            KEYRING_SERVICE, "TEST_KEY", "stdin_value"
         )
 
-    @patch('sapclimcp.cli.keyring')
+    @patch("sapclimcp.cli.keyring")
     def test_credential_set_empty_exits(self, mock_keyring, monkeypatch):
-        monkeypatch.setattr('sys.stdin', StringIO(''))
+        monkeypatch.setattr("sys.stdin", StringIO(""))
         with pytest.raises(SystemExit) as exc_info:
-            main(['credential', 'set', 'TEST_KEY'])
+            main(["credential", "set", "TEST_KEY"])
         assert exc_info.value.code == 1
         mock_keyring.set_password.assert_not_called()
 
-    @patch('sapclimcp.cli.keyring')
+    @patch("sapclimcp.cli.keyring")
     def test_credential_get_found(self, mock_keyring, capsys):
-        mock_keyring.get_password.return_value = 'found_value'
-        main(['credential', 'get', 'TEST_KEY'])
-        mock_keyring.get_password.assert_called_once_with(KEYRING_SERVICE, 'TEST_KEY')
-        assert 'found_value' in capsys.readouterr().out
+        mock_keyring.get_password.return_value = "found_value"
+        main(["credential", "get", "TEST_KEY"])
+        mock_keyring.get_password.assert_called_once_with(KEYRING_SERVICE, "TEST_KEY")
+        assert "found_value" in capsys.readouterr().out
 
-    @patch('sapclimcp.cli.keyring')
+    @patch("sapclimcp.cli.keyring")
     def test_credential_get_missing_exits(self, mock_keyring):
         mock_keyring.get_password.return_value = None
         with pytest.raises(SystemExit) as exc_info:
-            main(['credential', 'get', 'MISSING_KEY'])
+            main(["credential", "get", "MISSING_KEY"])
         assert exc_info.value.code == 1
 
-    @patch('sapclimcp.cli.keyring')
+    @patch("sapclimcp.cli.keyring")
     def test_credential_delete_found(self, mock_keyring, capsys):
-        main(['credential', 'delete', 'TEST_KEY'])
-        mock_keyring.delete_password.assert_called_once_with(KEYRING_SERVICE, 'TEST_KEY')
-        assert 'Deleted credential: TEST_KEY' in capsys.readouterr().out
+        main(["credential", "delete", "TEST_KEY"])
+        mock_keyring.delete_password.assert_called_once_with(KEYRING_SERVICE, "TEST_KEY")
+        assert "Deleted credential: TEST_KEY" in capsys.readouterr().out
 
-    @patch('sapclimcp.cli.keyring')
+    @patch("sapclimcp.cli.keyring")
     def test_credential_delete_missing_exits(self, mock_keyring):
         import keyring.errors as kr_errors
+
         mock_keyring.errors = kr_errors
-        mock_keyring.delete_password.side_effect = \
-            kr_errors.PasswordDeleteError('not found')
+        mock_keyring.delete_password.side_effect = kr_errors.PasswordDeleteError("not found")
         with pytest.raises(SystemExit) as exc_info:
-            main(['credential', 'delete', 'MISSING_KEY'])
+            main(["credential", "delete", "MISSING_KEY"])
         assert exc_info.value.code == 1
 
     def test_credential_no_action_exits(self):
         with pytest.raises(SystemExit) as exc_info:
-            main(['credential'])
+            main(["credential"])
         assert exc_info.value.code == 1

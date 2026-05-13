@@ -99,7 +99,7 @@ class TestArgParserToolNargs:
 
         assert schema["properties"]["files"] == {
             "type": "array",
-            "items": {"type": "string"}
+            "items": {"type": "string"},
         }
 
     def test_nargs_star_with_type_str(self):
@@ -111,7 +111,7 @@ class TestArgParserToolNargs:
 
         assert schema["properties"]["items"] == {
             "type": "array",
-            "items": {"type": "string"}
+            "items": {"type": "string"},
         }
         assert "items" not in schema["required"]
 
@@ -124,7 +124,7 @@ class TestArgParserToolNargs:
 
         assert schema["properties"]["numbers"] == {
             "type": "array",
-            "items": {"type": "integer"}
+            "items": {"type": "integer"},
         }
 
     def test_nargs_question_without_type(self):
@@ -168,7 +168,10 @@ class TestArgParserToolDefault:
 
         schema = tool.to_mcp_input_schema()
 
-        assert schema["properties"]["recursive"] == {"type": "boolean", "default": False}
+        assert schema["properties"]["recursive"] == {
+            "type": "boolean",
+            "default": False,
+        }
 
     def test_no_default_is_required(self):
         """Test argument without default is required."""
@@ -228,7 +231,11 @@ class TestArgParserToolChoices:
 
         schema = tool.to_mcp_input_schema()
 
-        assert schema["properties"]["type"]["enum"] == ["main", "definitions", "testclasses"]
+        assert schema["properties"]["type"]["enum"] == [
+            "main",
+            "definitions",
+            "testclasses",
+        ]
         assert schema["properties"]["type"]["default"] == "main"
 
     def test_choices_with_positional(self):
@@ -329,7 +336,7 @@ class TestArgParserToolActionAppend:
 
         assert schema["properties"]["include"] == {
             "type": "array",
-            "items": {"type": "string"}
+            "items": {"type": "string"},
         }
 
     def test_append_with_type(self):
@@ -341,7 +348,7 @@ class TestArgParserToolActionAppend:
 
         assert schema["properties"]["port"] == {
             "type": "array",
-            "items": {"type": "integer"}
+            "items": {"type": "integer"},
         }
 
 
@@ -374,7 +381,10 @@ class TestArgParserToolInheritance:
 
     def test_subparser_inherits_conn_factory(self):
         """Test that subparser inherits parent's conn_factory."""
-        mock_factory = lambda: None
+
+        def mock_factory():
+            return None
+
         parent = ArgParserTool("parent", None, conn_factory=mock_factory)
 
         child = parent.add_parser("child")

@@ -2,23 +2,19 @@
 
 import json
 import os
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-import sap.cli
-
 from sapclimcp.config import (
+    KEYRING_SERVICE,
     ConfigError,
     ConnectionManager,
     SecretRef,
     ServerConfig,
     SystemConfig,
     load_config,
-    KEYRING_SERVICE,
 )
-
 
 # ---------------------------------------------------------------------------
 # SecretRef
@@ -27,65 +23,65 @@ from sapclimcp.config import (
 
 class TestSecretRef:
     def test_literal_resolves_to_itself(self):
-        ref = SecretRef('hello')
-        assert ref.resolve() == 'hello'
+        ref = SecretRef("hello")
+        assert ref.resolve() == "hello"
 
     def test_empty_literal(self):
-        ref = SecretRef('')
-        assert ref.resolve() == ''
+        ref = SecretRef("")
+        assert ref.resolve() == ""
 
     def test_bool_true_for_non_empty(self):
-        assert bool(SecretRef('value')) is True
-        assert bool(SecretRef('keyring:key')) is True
-        assert bool(SecretRef('$ENV')) is True
+        assert bool(SecretRef("value")) is True
+        assert bool(SecretRef("keyring:key")) is True
+        assert bool(SecretRef("$ENV")) is True
 
     def test_bool_false_for_empty(self):
-        assert bool(SecretRef('')) is False
+        assert bool(SecretRef("")) is False
 
     def test_env_var_resolved(self, monkeypatch):
-        monkeypatch.setenv('MY_SECRET', 'resolved_value')
-        ref = SecretRef('$MY_SECRET')
-        assert ref.resolve() == 'resolved_value'
+        monkeypatch.setenv("MY_SECRET", "resolved_value")
+        ref = SecretRef("$MY_SECRET")
+        assert ref.resolve() == "resolved_value"
 
     def test_env_var_missing_raises(self):
-        os.environ.pop('NONEXISTENT_VAR_12345', None)
-        ref = SecretRef('$NONEXISTENT_VAR_12345')
-        with pytest.raises(ConfigError, match='NONEXISTENT_VAR_12345'):
+        os.environ.pop("NONEXISTENT_VAR_12345", None)
+        ref = SecretRef("$NONEXISTENT_VAR_12345")
+        with pytest.raises(ConfigError, match="NONEXISTENT_VAR_12345"):
             ref.resolve()
 
     def test_env_var_must_be_entire_string(self):
         """$VAR must be the entire string to be treated as a reference."""
-        ref = SecretRef('prefix_$VAR')
-        assert ref.resolve() == 'prefix_$VAR'
+        ref = SecretRef("prefix_$VAR")
+        assert ref.resolve() == "prefix_$VAR"
 
-    @patch('keyring.get_password')
+    @patch("keyring.get_password")
     def test_keyring_resolved(self, mock_get):
-        mock_get.return_value = 'secret_from_keyring'
-        ref = SecretRef('keyring:MY_KEY')
-        assert ref.resolve() == 'secret_from_keyring'
-        mock_get.assert_called_once_with(KEYRING_SERVICE, 'MY_KEY')
+        mock_get.return_value = "secret_from_keyring"
+        ref = SecretRef("keyring:MY_KEY")
+        assert ref.resolve() == "secret_from_keyring"
+        mock_get.assert_called_once_with(KEYRING_SERVICE, "MY_KEY")
 
-    @patch('keyring.get_password')
+    @patch("keyring.get_password")
     def test_keyring_missing_raises(self, mock_get):
         mock_get.return_value = None
-        ref = SecretRef('keyring:MISSING_KEY')
-        with pytest.raises(ConfigError, match='MISSING_KEY'):
+        ref = SecretRef("keyring:MISSING_KEY")
+        with pytest.raises(ConfigError, match="MISSING_KEY"):
             ref.resolve()
 
     def test_repr_hides_literals(self):
-        assert '***' in repr(SecretRef('password123'))
-        assert 'password123' not in repr(SecretRef('password123'))
+        assert "***" in repr(SecretRef("password123"))
+        assert "password123" not in repr(SecretRef("password123"))
 
     def test_repr_shows_env_var_name(self):
-        assert '$MY_VAR' in repr(SecretRef('$MY_VAR'))
+        assert "$MY_VAR" in repr(SecretRef("$MY_VAR"))
 
     def test_repr_hides_keyring_key(self):
-        r = repr(SecretRef('keyring:I7D'))
-        assert 'keyring:***' in r
-        assert 'I7D' not in r
+        r = repr(SecretRef("keyring:I7D"))
+        assert "keyring:***" in r
+        assert "I7D" not in r
 
     def test_repr_empty(self):
-        assert repr(SecretRef('')) == "SecretRef('')"
+        assert repr(SecretRef("")) == "SecretRef('')"
 
 
 # ---------------------------------------------------------------------------
@@ -95,141 +91,165 @@ class TestSecretRef:
 
 def _write_json(tmp_path, data: dict) -> str:
     """Write data to a JSON file in tmp_path and return the path string."""
-    path = tmp_path / 'config.json'
-    path.write_text(json.dumps(data), encoding='utf-8')
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
     return str(path)
 
 
 class TestLoadConfig:
     def test_basic_single_system(self, tmp_path):
-        path = _write_json(tmp_path, {
-            'systems': {
-                'DEV': {
-                    'ashost': 'dev.example.com',
-                    'client': '100',
-                    'port': 443,
-                    'user': 'admin',
+        path = _write_json(
+            tmp_path,
+            {
+                "systems": {
+                    "DEV": {
+                        "ashost": "dev.example.com",
+                        "client": "100",
+                        "port": 443,
+                        "user": "admin",
+                    }
                 }
-            }
-        })
+            },
+        )
         cfg = load_config(path)
-        assert 'DEV' in cfg.systems
-        assert cfg.systems['DEV'].ashost == 'dev.example.com'
-        assert cfg.default_system == 'DEV'  # auto-default for single system
+        assert "DEV" in cfg.systems
+        assert cfg.systems["DEV"].ashost == "dev.example.com"
+        assert cfg.default_system == "DEV"  # auto-default for single system
 
     def test_credential_fields_are_secret_refs(self, tmp_path):
-        path = _write_json(tmp_path, {
-            'systems': {
-                'DEV': {
-                    'ashost': 'dev.example.com',
-                    'client': '100',
-                    'user': 'admin',
-                    'password': 'secret',
-                    'cookie': 'SAP=abc',
+        path = _write_json(
+            tmp_path,
+            {
+                "systems": {
+                    "DEV": {
+                        "ashost": "dev.example.com",
+                        "client": "100",
+                        "user": "admin",
+                        "password": "secret",
+                        "cookie": "SAP=abc",
+                    }
                 }
-            }
-        })
+            },
+        )
         cfg = load_config(path)
-        sys = cfg.systems['DEV']
+        sys = cfg.systems["DEV"]
         assert isinstance(sys.user, SecretRef)
         assert isinstance(sys.password, SecretRef)
         assert isinstance(sys.cookie, SecretRef)
 
     def test_env_var_deferred_resolution(self, monkeypatch, tmp_path):
-        monkeypatch.setenv('TEST_SAP_USER', 'admin')
-        monkeypatch.setenv('TEST_SAP_PASS', 's3cret')
-        path = _write_json(tmp_path, {
-            'systems': {
-                'DEV': {
-                    'ashost': 'dev.example.com',
-                    'client': '100',
-                    'auth': 'basic',
-                    'user': '$TEST_SAP_USER',
-                    'password': '$TEST_SAP_PASS',
+        monkeypatch.setenv("TEST_SAP_USER", "admin")
+        monkeypatch.setenv("TEST_SAP_PASS", "s3cret")
+        path = _write_json(
+            tmp_path,
+            {
+                "systems": {
+                    "DEV": {
+                        "ashost": "dev.example.com",
+                        "client": "100",
+                        "auth": "basic",
+                        "user": "$TEST_SAP_USER",
+                        "password": "$TEST_SAP_PASS",
+                    }
                 }
-            }
-        })
+            },
+        )
         cfg = load_config(path)
         # SecretRef stores raw value, resolves lazily
-        assert cfg.systems['DEV'].user.raw == '$TEST_SAP_USER'
-        assert cfg.systems['DEV'].user.resolve() == 'admin'
-        assert cfg.systems['DEV'].password.resolve() == 's3cret'
+        assert cfg.systems["DEV"].user.raw == "$TEST_SAP_USER"
+        assert cfg.systems["DEV"].user.resolve() == "admin"
+        assert cfg.systems["DEV"].password.resolve() == "s3cret"
 
     def test_multi_system_with_default(self, tmp_path):
-        path = _write_json(tmp_path, {
-            'systems': {
-                'DEV': {'ashost': 'dev.example.com', 'client': '100', 'user': 'u'},
-                'QA': {'ashost': 'qa.example.com', 'client': '200', 'user': 'u'},
+        path = _write_json(
+            tmp_path,
+            {
+                "systems": {
+                    "DEV": {"ashost": "dev.example.com", "client": "100", "user": "u"},
+                    "QA": {"ashost": "qa.example.com", "client": "200", "user": "u"},
+                },
+                "default_system": "DEV",
             },
-            'default_system': 'DEV',
-        })
+        )
         cfg = load_config(path)
         assert len(cfg.systems) == 2
-        assert cfg.default_system == 'DEV'
+        assert cfg.default_system == "DEV"
 
     def test_multi_system_no_default(self, tmp_path):
-        path = _write_json(tmp_path, {
-            'systems': {
-                'DEV': {'ashost': 'dev.example.com', 'client': '100', 'user': 'u'},
-                'QA': {'ashost': 'qa.example.com', 'client': '200', 'user': 'u'},
+        path = _write_json(
+            tmp_path,
+            {
+                "systems": {
+                    "DEV": {"ashost": "dev.example.com", "client": "100", "user": "u"},
+                    "QA": {"ashost": "qa.example.com", "client": "200", "user": "u"},
+                },
             },
-        })
+        )
         cfg = load_config(path)
         assert cfg.default_system is None
 
     def test_bad_default_system_raises(self, tmp_path):
-        path = _write_json(tmp_path, {
-            'systems': {
-                'DEV': {'ashost': 'dev.example.com', 'client': '100', 'user': 'u'},
+        path = _write_json(
+            tmp_path,
+            {
+                "systems": {
+                    "DEV": {"ashost": "dev.example.com", "client": "100", "user": "u"},
+                },
+                "default_system": "NONEXISTENT",
             },
-            'default_system': 'NONEXISTENT',
-        })
-        with pytest.raises(ConfigError, match='NONEXISTENT'):
+        )
+        with pytest.raises(ConfigError, match="NONEXISTENT"):
             load_config(path)
 
     def test_empty_systems_raises(self, tmp_path):
-        path = _write_json(tmp_path, {'systems': {}})
-        with pytest.raises(ConfigError, match='At least one system'):
+        path = _write_json(tmp_path, {"systems": {}})
+        with pytest.raises(ConfigError, match="At least one system"):
             load_config(path)
 
     def test_missing_file_raises(self):
-        with pytest.raises(ConfigError, match='Failed to load'):
-            load_config('/nonexistent/path.json')
+        with pytest.raises(ConfigError, match="Failed to load"):
+            load_config("/nonexistent/path.json")
 
     def test_invalid_json_raises(self, tmp_path):
-        path = tmp_path / 'bad.json'
-        path.write_text('not json{{{')
-        with pytest.raises(ConfigError, match='Failed to load'):
+        path = tmp_path / "bad.json"
+        path.write_text("not json{{{")
+        with pytest.raises(ConfigError, match="Failed to load"):
             load_config(str(path))
 
     def test_cookie_auth_system(self, tmp_path):
-        path = _write_json(tmp_path, {
-            'systems': {
-                'I7D': {
-                    'ashost': 'i7d.example.com',
-                    'client': '001',
-                    'auth': 'cookie',
-                    'cookie': 'SAP_SESSIONID=abc123',
+        path = _write_json(
+            tmp_path,
+            {
+                "systems": {
+                    "I7D": {
+                        "ashost": "i7d.example.com",
+                        "client": "001",
+                        "auth": "cookie",
+                        "cookie": "SAP_SESSIONID=abc123",
+                    }
                 }
-            }
-        })
+            },
+        )
         cfg = load_config(path)
-        assert cfg.systems['I7D'].auth == 'cookie'
-        assert cfg.systems['I7D'].cookie.resolve() == 'SAP_SESSIONID=abc123'
+        assert cfg.systems["I7D"].auth == "cookie"
+        assert cfg.systems["I7D"].cookie.resolve() == "SAP_SESSIONID=abc123"
 
     def test_keyring_reference_stored_as_raw(self, tmp_path):
-        path = _write_json(tmp_path, {
-            'systems': {
-                'I7D': {
-                    'ashost': 'i7d.example.com',
-                    'client': '001',
-                    'auth': 'cookie',
-                    'cookie': 'keyring:I7D',
+        path = _write_json(
+            tmp_path,
+            {
+                "systems": {
+                    "I7D": {
+                        "ashost": "i7d.example.com",
+                        "client": "001",
+                        "auth": "cookie",
+                        "cookie": "keyring:I7D",
+                    }
                 }
-            }
-        })
+            },
+        )
         cfg = load_config(path)
-        assert cfg.systems['I7D'].cookie.raw == 'keyring:I7D'
+        assert cfg.systems["I7D"].cookie.raw == "keyring:I7D"
 
 
 # ---------------------------------------------------------------------------
@@ -239,16 +259,18 @@ class TestLoadConfig:
 
 class TestServerConfig:
     def test_single_system_auto_default(self):
-        cfg = ServerConfig(systems={
-            'DEV': SystemConfig(ashost='h', client='c', user=SecretRef('u'))
-        })
-        assert cfg.default_system == 'DEV'
+        cfg = ServerConfig(
+            systems={"DEV": SystemConfig(ashost="h", client="c", user=SecretRef("u"))}
+        )
+        assert cfg.default_system == "DEV"
 
     def test_multi_system_no_auto_default(self):
-        cfg = ServerConfig(systems={
-            'A': SystemConfig(ashost='a', client='1', user=SecretRef('u')),
-            'B': SystemConfig(ashost='b', client='2', user=SecretRef('u')),
-        })
+        cfg = ServerConfig(
+            systems={
+                "A": SystemConfig(ashost="a", client="1", user=SecretRef("u")),
+                "B": SystemConfig(ashost="b", client="2", user=SecretRef("u")),
+            }
+        )
         assert cfg.default_system is None
 
 
@@ -258,192 +280,196 @@ class TestServerConfig:
 
 
 class TestConnectionManager:
-
     @staticmethod
     def _make_manager(**overrides) -> ConnectionManager:
         defaults = dict(
-            ashost='test.example.com',
-            client='100',
+            ashost="test.example.com",
+            client="100",
             port=443,
-            user=SecretRef('admin'),
-            password=SecretRef('secret'),
+            user=SecretRef("admin"),
+            password=SecretRef("secret"),
         )
         # Allow overrides to pass SecretRef or plain strings for cookie
-        if 'cookie' in overrides and isinstance(overrides['cookie'], str):
-            overrides['cookie'] = SecretRef(overrides['cookie'])
-        if 'user' in overrides and isinstance(overrides['user'], str):
-            overrides['user'] = SecretRef(overrides['user'])
-        if 'password' in overrides and isinstance(overrides['password'], str):
-            overrides['password'] = SecretRef(overrides['password'])
+        if "cookie" in overrides and isinstance(overrides["cookie"], str):
+            overrides["cookie"] = SecretRef(overrides["cookie"])
+        if "user" in overrides and isinstance(overrides["user"], str):
+            overrides["user"] = SecretRef(overrides["user"])
+        if "password" in overrides and isinstance(overrides["password"], str):
+            overrides["password"] = SecretRef(overrides["password"])
         defaults.update(overrides)
         sys_config = SystemConfig(**defaults)
-        cfg = ServerConfig(systems={'DEV': sys_config}, default_system='DEV')
+        cfg = ServerConfig(systems={"DEV": sys_config}, default_system="DEV")
         return ConnectionManager(cfg)
 
     def test_system_names(self):
         mgr = self._make_manager()
-        assert mgr.system_names == ['DEV']
+        assert mgr.system_names == ["DEV"]
 
     def test_default_system(self):
         mgr = self._make_manager()
-        assert mgr.default_system == 'DEV'
+        assert mgr.default_system == "DEV"
 
-    @patch('sap.adt.Connection')
+    @patch("sap.adt.Connection")
     def test_get_adt_connection(self, mock_conn_cls):
         mock_conn = MagicMock()
         mock_conn_cls.return_value = mock_conn
 
         mgr = self._make_manager()
-        conn = mgr.get_connection('DEV', 'adt')
+        conn = mgr.get_connection("DEV", "adt")
 
         assert conn is mock_conn
         mock_conn_cls.assert_called_once()
 
         # Verify connection args
         kwargs = mock_conn_cls.call_args.kwargs
-        assert kwargs['host'] == 'test.example.com'
-        assert kwargs['client'] == '100'
+        assert kwargs["host"] == "test.example.com"
+        assert kwargs["client"] == "100"
 
-    @patch('sap.adt.Connection')
+    @patch("sap.adt.Connection")
     def test_connection_caching(self, mock_conn_cls):
         mock_conn_cls.return_value = MagicMock()
 
         mgr = self._make_manager()
-        conn1 = mgr.get_connection('DEV', 'adt')
-        conn2 = mgr.get_connection('DEV', 'adt')
+        conn1 = mgr.get_connection("DEV", "adt")
+        conn2 = mgr.get_connection("DEV", "adt")
 
         assert conn1 is conn2
         assert mock_conn_cls.call_count == 1  # Only created once
 
-    @patch('sap.adt.Connection')
+    @patch("sap.adt.Connection")
     def test_default_system_resolution(self, mock_conn_cls):
         mock_conn_cls.return_value = MagicMock()
 
         mgr = self._make_manager()
-        conn = mgr.get_connection(None, 'adt')
+        conn = mgr.get_connection(None, "adt")
 
         assert conn is not None
         mock_conn_cls.assert_called_once()
 
     def test_unknown_system_raises(self):
         mgr = self._make_manager()
-        with pytest.raises(ConfigError, match='Unknown system'):
-            mgr.get_connection('NONEXISTENT', 'adt')
+        with pytest.raises(ConfigError, match="Unknown system"):
+            mgr.get_connection("NONEXISTENT", "adt")
 
     def test_no_default_no_system_raises(self):
         cfg = ServerConfig(
             systems={
-                'A': SystemConfig(ashost='a', client='1', user=SecretRef('u')),
-                'B': SystemConfig(ashost='b', client='2', user=SecretRef('u')),
+                "A": SystemConfig(ashost="a", client="1", user=SecretRef("u")),
+                "B": SystemConfig(ashost="b", client="2", user=SecretRef("u")),
             },
         )
         mgr = ConnectionManager(cfg)
-        with pytest.raises(ConfigError, match='No system specified'):
-            mgr.get_connection(None, 'adt')
+        with pytest.raises(ConfigError, match="No system specified"):
+            mgr.get_connection(None, "adt")
 
-    @patch('sap.adt.Connection')
+    @patch("sap.adt.Connection")
     def test_cookie_auth_uses_session_initializer(self, mock_conn_cls):
         """Cookie auth passes CookieSessionInitializer to sap.adt.Connection."""
         mock_conn_cls.return_value = MagicMock()
 
-        mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
-        mgr.get_connection('DEV', 'adt')
+        mgr = self._make_manager(auth="cookie", cookie="SAP_SESSION=abc")
+        mgr.get_connection("DEV", "adt")
 
         mock_conn_cls.assert_called_once()
         kwargs = mock_conn_cls.call_args.kwargs
-        initializer = kwargs['session_initializer']
+        initializer = kwargs["session_initializer"]
 
         from sapclimcp.config import CookieSessionInitializer
+
         assert isinstance(initializer, CookieSessionInitializer)
 
         # Verify initialize_session sets cookie and removes basic auth
         import requests as req
+
         session = req.Session()
         result = initializer.initialize_session(session)
         assert result.auth is None
-        assert result.headers['Cookie'] == 'SAP_SESSION=abc'
+        assert result.headers["Cookie"] == "SAP_SESSION=abc"
 
         # Verify build_unauthorized_error returns proper error type
         from sap.http.errors import UnauthorizedError
+
         mock_req = MagicMock()
         mock_res = MagicMock()
         err = initializer.build_unauthorized_error(mock_req, mock_res)
         assert isinstance(err, UnauthorizedError)
 
-    @patch('sap.adt.Connection')
+    @patch("sap.adt.Connection")
     def test_basic_auth_no_session_initializer(self, mock_conn_cls):
         """Basic auth passes session_initializer=None to sap.adt.Connection."""
         mock_conn_cls.return_value = MagicMock()
 
         mgr = self._make_manager()
-        mgr.get_connection('DEV', 'adt')
+        mgr.get_connection("DEV", "adt")
 
         mock_conn_cls.assert_called_once()
         kwargs = mock_conn_cls.call_args.kwargs
-        assert kwargs['session_initializer'] is None
+        assert kwargs["session_initializer"] is None
 
-    @patch('sap.cli.gcts_connection_from_args')
+    @patch("sap.cli.gcts_connection_from_args")
     def test_get_gcts_connection(self, mock_factory):
         mock_conn = MagicMock()
         mock_factory.return_value = mock_conn
 
         mgr = self._make_manager()
-        conn = mgr.get_connection('DEV', 'gcts')
+        conn = mgr.get_connection("DEV", "gcts")
 
         assert conn is mock_conn
 
     def test_unsupported_conn_type_raises(self):
         mgr = self._make_manager()
-        with pytest.raises(ConfigError, match='Unsupported connection type'):
-            mgr.get_connection('DEV', 'odata')
+        with pytest.raises(ConfigError, match="Unsupported connection type"):
+            mgr.get_connection("DEV", "odata")
 
     def test_gcts_cookie_auth_raises(self):
-        mgr = self._make_manager(auth='cookie', cookie='SAP_SESSION=abc')
-        with pytest.raises(ConfigError, match='not supported for gCTS'):
-            mgr.get_connection('DEV', 'gcts')
+        mgr = self._make_manager(auth="cookie", cookie="SAP_SESSION=abc")
+        with pytest.raises(ConfigError, match="not supported for gCTS"):
+            mgr.get_connection("DEV", "gcts")
 
-    @patch('keyring.get_password')
-    @patch('sap.adt.Connection')
+    @patch("keyring.get_password")
+    @patch("sap.adt.Connection")
     def test_keyring_resolved_at_connection_time(self, mock_conn_cls, mock_keyring):
         """keyring: references are resolved when creating a connection, not at load time."""
         mock_conn_cls.return_value = MagicMock()
-        mock_keyring.return_value = 'fresh_cookie_value'
+        mock_keyring.return_value = "fresh_cookie_value"
 
-        mgr = self._make_manager(auth='cookie', cookie='keyring:I7D')
+        mgr = self._make_manager(auth="cookie", cookie="keyring:I7D")
         # Keyring should NOT have been consulted yet (deferred resolution)
         assert mock_keyring.call_count == 0
 
-        mgr.get_connection('DEV', 'adt')
+        mgr.get_connection("DEV", "adt")
 
-        mock_keyring.assert_called_once_with(KEYRING_SERVICE, 'I7D')
+        mock_keyring.assert_called_once_with(KEYRING_SERVICE, "I7D")
         kwargs = mock_conn_cls.call_args.kwargs
-        initializer = kwargs['session_initializer']
+        initializer = kwargs["session_initializer"]
         # Verify the resolved cookie was used
         import requests as req
+
         session = req.Session()
         initializer.initialize_session(session)
-        assert session.headers['Cookie'] == 'fresh_cookie_value'
+        assert session.headers["Cookie"] == "fresh_cookie_value"
 
-    @patch('keyring.get_password')
-    @patch('sap.adt.Connection')
+    @patch("keyring.get_password")
+    @patch("sap.adt.Connection")
     def test_keyring_re_resolved_after_eviction(self, mock_conn_cls, mock_keyring):
         """After eviction, keyring is re-read to get a fresh credential."""
         mock_conn_cls.return_value = MagicMock()
-        mock_keyring.side_effect = ['old_cookie', 'new_cookie']
+        mock_keyring.side_effect = ["old_cookie", "new_cookie"]
 
-        mgr = self._make_manager(auth='cookie', cookie='keyring:I7D')
-        mgr.get_connection('DEV', 'adt')
-        mgr.evict('DEV', 'adt')
-        mgr.get_connection('DEV', 'adt')
+        mgr = self._make_manager(auth="cookie", cookie="keyring:I7D")
+        mgr.get_connection("DEV", "adt")
+        mgr.evict("DEV", "adt")
+        mgr.get_connection("DEV", "adt")
 
         assert mock_keyring.call_count == 2
         # Verify second connection used the fresh cookie
         second_call_kwargs = mock_conn_cls.call_args_list[1].kwargs
-        initializer = second_call_kwargs['session_initializer']
+        initializer = second_call_kwargs["session_initializer"]
         import requests as req
+
         session = req.Session()
         initializer.initialize_session(session)
-        assert session.headers['Cookie'] == 'new_cookie'
+        assert session.headers["Cookie"] == "new_cookie"
 
 
 # ---------------------------------------------------------------------------
@@ -452,46 +478,45 @@ class TestConnectionManager:
 
 
 class TestConnectionManagerTTL:
-
     @staticmethod
     def _make_manager(cache_ttl_seconds=3600, **overrides) -> ConnectionManager:
         defaults = dict(
-            ashost='test.example.com',
-            client='100',
+            ashost="test.example.com",
+            client="100",
             port=443,
-            user=SecretRef('admin'),
-            password=SecretRef('secret'),
+            user=SecretRef("admin"),
+            password=SecretRef("secret"),
         )
-        if 'cookie' in overrides and isinstance(overrides['cookie'], str):
-            overrides['cookie'] = SecretRef(overrides['cookie'])
+        if "cookie" in overrides and isinstance(overrides["cookie"], str):
+            overrides["cookie"] = SecretRef(overrides["cookie"])
         defaults.update(overrides)
         sys_config = SystemConfig(**defaults)
-        cfg = ServerConfig(systems={'DEV': sys_config}, default_system='DEV')
+        cfg = ServerConfig(systems={"DEV": sys_config}, default_system="DEV")
         return ConnectionManager(cfg, cache_ttl_seconds=cache_ttl_seconds)
 
-    @patch('sapclimcp.config.time.monotonic')
-    @patch('sap.adt.Connection')
+    @patch("sapclimcp.config.time.monotonic")
+    @patch("sap.adt.Connection")
     def test_ttl_expired_connection_recreated(self, mock_conn_cls, mock_time):
         """After TTL expires, get_connection must create a new connection."""
-        conn_first = MagicMock(name='conn_first')
-        conn_second = MagicMock(name='conn_second')
+        conn_first = MagicMock(name="conn_first")
+        conn_second = MagicMock(name="conn_second")
         mock_conn_cls.side_effect = [conn_first, conn_second]
 
         mgr = self._make_manager(cache_ttl_seconds=300)
 
         mock_time.return_value = 1000.0
-        result1 = mgr.get_connection('DEV', 'adt')
+        result1 = mgr.get_connection("DEV", "adt")
         assert result1 is conn_first
 
         # Advance past TTL
         mock_time.return_value = 1301.0
-        result2 = mgr.get_connection('DEV', 'adt')
+        result2 = mgr.get_connection("DEV", "adt")
         assert result2 is conn_second
         assert result2 is not result1
         assert mock_conn_cls.call_count == 2
 
-    @patch('sapclimcp.config.time.monotonic')
-    @patch('sap.adt.Connection')
+    @patch("sapclimcp.config.time.monotonic")
+    @patch("sap.adt.Connection")
     def test_ttl_not_expired_returns_cached(self, mock_conn_cls, mock_time):
         """Before TTL expires, the same cached connection is returned."""
         mock_conn_cls.return_value = MagicMock()
@@ -499,89 +524,95 @@ class TestConnectionManagerTTL:
         mgr = self._make_manager(cache_ttl_seconds=300)
 
         mock_time.return_value = 1000.0
-        conn1 = mgr.get_connection('DEV', 'adt')
+        conn1 = mgr.get_connection("DEV", "adt")
 
         # Advance but NOT past TTL
         mock_time.return_value = 1299.0
-        conn2 = mgr.get_connection('DEV', 'adt')
+        conn2 = mgr.get_connection("DEV", "adt")
 
         assert conn1 is conn2
         assert mock_conn_cls.call_count == 1
 
-    @patch('sap.adt.Connection')
+    @patch("sap.adt.Connection")
     def test_evict_removes_cached_connection(self, mock_conn_cls):
         """After evict(), the next get_connection creates a fresh connection."""
-        conn_first = MagicMock(name='conn_first')
-        conn_second = MagicMock(name='conn_second')
+        conn_first = MagicMock(name="conn_first")
+        conn_second = MagicMock(name="conn_second")
         mock_conn_cls.side_effect = [conn_first, conn_second]
 
         mgr = self._make_manager()
-        result1 = mgr.get_connection('DEV', 'adt')
+        result1 = mgr.get_connection("DEV", "adt")
         assert result1 is conn_first
 
-        mgr.evict('DEV', 'adt')
+        mgr.evict("DEV", "adt")
 
-        result2 = mgr.get_connection('DEV', 'adt')
+        result2 = mgr.get_connection("DEV", "adt")
         assert result2 is conn_second
         assert mock_conn_cls.call_count == 2
 
     def test_evict_noop_for_uncached(self):
         """Evicting a connection that was never cached does not raise."""
         mgr = self._make_manager()
-        mgr.evict('DEV', 'adt')
+        mgr.evict("DEV", "adt")
 
-    @patch('sap.adt.Connection')
+    @patch("sap.adt.Connection")
     def test_evict_none_system_uses_default(self, mock_conn_cls):
         """evict(None, factory) resolves to the default system."""
-        conn_first = MagicMock(name='conn_first')
-        conn_second = MagicMock(name='conn_second')
+        conn_first = MagicMock(name="conn_first")
+        conn_second = MagicMock(name="conn_second")
         mock_conn_cls.side_effect = [conn_first, conn_second]
 
         mgr = self._make_manager()
-        mgr.get_connection(None, 'adt')
+        mgr.get_connection(None, "adt")
 
-        mgr.evict(None, 'adt')
+        mgr.evict(None, "adt")
 
-        result = mgr.get_connection(None, 'adt')
+        result = mgr.get_connection(None, "adt")
         assert result is conn_second
         assert mock_conn_cls.call_count == 2
 
-    @patch('sapclimcp.config.time.monotonic')
-    @patch('sap.adt.Connection')
+    @patch("sapclimcp.config.time.monotonic")
+    @patch("sap.adt.Connection")
     def test_custom_ttl(self, mock_conn_cls, mock_time):
         """A short custom TTL triggers recreation sooner."""
-        conn_first = MagicMock(name='conn_first')
-        conn_second = MagicMock(name='conn_second')
+        conn_first = MagicMock(name="conn_first")
+        conn_second = MagicMock(name="conn_second")
         mock_conn_cls.side_effect = [conn_first, conn_second]
 
         mgr = self._make_manager(cache_ttl_seconds=60)
 
         mock_time.return_value = 0.0
-        mgr.get_connection('DEV', 'adt')
+        mgr.get_connection("DEV", "adt")
 
         mock_time.return_value = 60.0
-        result = mgr.get_connection('DEV', 'adt')
+        result = mgr.get_connection("DEV", "adt")
         assert result is conn_second
 
     def test_evict_unsupported_conn_type_is_noop(self):
         """Evicting with an unrecognized conn_type does not raise."""
         mgr = self._make_manager()
-        mgr.evict('DEV', 'odata')
+        mgr.evict("DEV", "odata")
 
     def test_evict_none_system_no_default_is_noop(self):
         """evict(None, factory) is a no-op when no default_system is configured."""
         sys_a = SystemConfig(
-            ashost='a.example.com', client='100', port=443,
-            user=SecretRef('admin'), password=SecretRef('secret'),
+            ashost="a.example.com",
+            client="100",
+            port=443,
+            user=SecretRef("admin"),
+            password=SecretRef("secret"),
         )
         sys_b = SystemConfig(
-            ashost='b.example.com', client='200', port=443,
-            user=SecretRef('admin'), password=SecretRef('secret'),
+            ashost="b.example.com",
+            client="200",
+            port=443,
+            user=SecretRef("admin"),
+            password=SecretRef("secret"),
         )
-        cfg = ServerConfig(systems={'A': sys_a, 'B': sys_b})
+        cfg = ServerConfig(systems={"A": sys_a, "B": sys_b})
         assert cfg.default_system is None
         mgr = ConnectionManager(cfg)
-        mgr.evict(None, 'adt')
+        mgr.evict(None, "adt")
 
 
 # ---------------------------------------------------------------------------
@@ -590,31 +621,27 @@ class TestConnectionManagerTTL:
 
 
 class TestSystemConfigValidation:
-
     def test_invalid_auth_type_raises(self):
         with pytest.raises(ConfigError, match="Invalid auth type 'cookies'"):
-            SystemConfig(ashost='h', client='c', auth='cookies')
+            SystemConfig(ashost="h", client="c", auth="cookies")
 
     def test_cookie_auth_without_cookie_raises(self):
-        with pytest.raises(ConfigError, match='non-empty'):
-            SystemConfig(ashost='h', client='c', auth='cookie', cookie=SecretRef(''))
+        with pytest.raises(ConfigError, match="non-empty"):
+            SystemConfig(ashost="h", client="c", auth="cookie", cookie=SecretRef(""))
 
     def test_basic_auth_without_user_raises(self):
-        with pytest.raises(ConfigError, match='non-empty'):
-            SystemConfig(ashost='h', client='c', auth='basic', user=SecretRef(''))
+        with pytest.raises(ConfigError, match="non-empty"):
+            SystemConfig(ashost="h", client="c", auth="basic", user=SecretRef(""))
 
     def test_valid_basic_auth(self):
         cfg = SystemConfig(
-            ashost='h', client='c',
-            user=SecretRef('admin'), password=SecretRef('pass')
+            ashost="h", client="c", user=SecretRef("admin"), password=SecretRef("pass")
         )
-        assert cfg.auth == 'basic'
+        assert cfg.auth == "basic"
 
     def test_valid_cookie_auth(self):
-        cfg = SystemConfig(
-            ashost='h', client='c', auth='cookie', cookie=SecretRef('SAP=abc')
-        )
-        assert cfg.auth == 'cookie'
+        cfg = SystemConfig(ashost="h", client="c", auth="cookie", cookie=SecretRef("SAP=abc"))
+        assert cfg.auth == "cookie"
 
 
 # ---------------------------------------------------------------------------
@@ -623,42 +650,52 @@ class TestSystemConfigValidation:
 
 
 class TestGetConnectionParams:
-
     def _make_manager(self):
         sys = SystemConfig(
-            ashost='dev.example.com', client='100', port=443,
-            user=SecretRef('admin'), password=SecretRef('secret'),
-            ssl=True, verify=False,
+            ashost="dev.example.com",
+            client="100",
+            port=443,
+            user=SecretRef("admin"),
+            password=SecretRef("secret"),
+            ssl=True,
+            verify=False,
         )
-        cfg = ServerConfig(systems={'DEV': sys}, default_system='DEV')
+        cfg = ServerConfig(systems={"DEV": sys}, default_system="DEV")
         return ConnectionManager(cfg)
 
     def test_returns_expected_keys(self):
         mgr = self._make_manager()
-        params = mgr.get_connection_params('DEV')
-        assert set(params.keys()) == {'ashost', 'port', 'client', 'user', 'ssl', 'verify'}
+        params = mgr.get_connection_params("DEV")
+        assert set(params.keys()) == {
+            "ashost",
+            "port",
+            "client",
+            "user",
+            "ssl",
+            "verify",
+        }
 
     def test_password_not_included(self):
         mgr = self._make_manager()
-        params = mgr.get_connection_params('DEV')
-        assert 'password' not in params
+        params = mgr.get_connection_params("DEV")
+        assert "password" not in params
 
     def test_values_match_config(self):
         mgr = self._make_manager()
-        params = mgr.get_connection_params('DEV')
-        assert params['ashost'] == 'dev.example.com'
-        assert params['client'] == '100'
-        assert params['port'] == 443
-        assert params['user'] == 'admin'
-        assert params['ssl'] is True
-        assert params['verify'] is False
+        params = mgr.get_connection_params("DEV")
+        assert params["ashost"] == "dev.example.com"
+        assert params["client"] == "100"
+        assert params["port"] == 443
+        assert params["user"] == "admin"
+        assert params["ssl"] is True
+        assert params["verify"] is False
 
     def test_none_resolves_to_default(self):
         mgr = self._make_manager()
         params = mgr.get_connection_params(None)
-        assert params['ashost'] == 'dev.example.com'
+        assert params["ashost"] == "dev.example.com"
 
     def test_unknown_system_raises(self):
         mgr = self._make_manager()
         with pytest.raises(ConfigError, match="Unknown system"):
-            mgr.get_connection_params('PROD')
+            mgr.get_connection_params("PROD")
