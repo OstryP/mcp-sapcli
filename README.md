@@ -103,6 +103,7 @@ sapcli-mcp --host 0.0.0.0 --port 9000
 | `--experimental` | (off)       | Expose all sapcli commands, not just verified ones  |
 | `--host`         | `127.0.0.1` | Host address to bind to (HTTP mode only)           |
 | `--port`         | `8000`      | Port to listen on (HTTP mode only)                 |
+| `--log-level`    | (none)      | Logging level to stderr (env: `SAPCLI_MCP_LOG_LEVEL`) |
 
 ### Legacy invocation
 
