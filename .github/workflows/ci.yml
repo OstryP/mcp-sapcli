@@ -119,15 +119,13 @@ jobs:
           uv run python -c "from sapclimcp.server import create_mcp_server; print('server: OK')"
 
       - name: Credential store/retrieve roundtrip
-        env:
-          # Linux CI has no secret service — use plaintext file backend
-          PYTHON_KEYRING_BACKEND: ${{ matrix.os == 'ubuntu-latest' && 'keyring.backends.fail.Keyring' || '' }}
         run: |
           uv run python -c "
           import sys, platform
-          # Skip keyring roundtrip on Linux CI (no secret service daemon)
-          if platform.system() == 'Linux':
-              print('keyring roundtrip: SKIPPED (no secret service in CI)')
+          # Only Windows CI has a headless credential store
+          # Linux has no secret service, macOS Keychain needs user interaction
+          if platform.system() != 'Windows':
+              print(f'keyring roundtrip: SKIPPED ({platform.system()} CI has no headless keyring)')
               sys.exit(0)
           import keyring
           keyring.set_password('sapcli-mcp', 'ci-test-key', 'ci-test-value')
