@@ -1,9 +1,13 @@
 """
 Server-side system configuration for mcp-sapcli.
 
-Loads named SAP system definitions from a JSON config file,
-resolves ``$ENV_VAR`` references from environment variables,
+Loads named SAP system definitions from a JSON config file
 and manages cached connections per system.
+
+Credential fields (user, password, cookie) support deferred resolution:
+- ``keyring:<key>`` — resolved from OS keyring at connection time
+- ``$ENV_VAR`` — resolved from environment variable at connection time
+- literal string — used as-is
 """
 
 import json
@@ -27,6 +31,62 @@ from sapclimcp.errors import ConfigError
 _LOGGER = logging.getLogger(__name__)
 
 _ENV_VAR_RE = re.compile(r'^\$([A-Za-z_][A-Za-z0-9_]*)$')
+
+KEYRING_SERVICE = 'sapcli-mcp'
+
+
+@dataclass(frozen=True, slots=True)
+class SecretRef:
+    """A deferred reference to a credential value.
+
+    Supports three resolution modes:
+    - ``keyring:<key>`` — resolved from OS keyring (service: sapcli-mcp)
+    - ``$ENV_VAR`` — resolved from environment variable
+    - literal string — returned as-is
+
+    Resolution happens at connection-creation time, not at config load time.
+    This allows external scripts to update credentials (e.g. refresh an SSO
+    cookie in the keyring) without restarting the server.
+    """
+
+    raw: str
+
+    def resolve(self) -> str:
+        """Resolve the reference to its current value."""
+        if self.raw.startswith('keyring:'):
+            key = self.raw[len('keyring:'):]
+            import keyring
+            value = keyring.get_password(KEYRING_SERVICE, key)
+            if value is None:
+                raise ConfigError(
+                    f"No keyring entry for key '{key}' "
+                    f"(service: {KEYRING_SERVICE}). "
+                    f"Store it with: sapcli-mcp credential set {key} <value>"
+                )
+            return value
+
+        match = _ENV_VAR_RE.match(self.raw)
+        if match:
+            var_name = match.group(1)
+            value = os.environ.get(var_name)
+            if value is None:
+                raise ConfigError(
+                    f"Environment variable '{var_name}' is not set"
+                )
+            return value
+
+        return self.raw
+
+    def __bool__(self) -> bool:
+        """Non-empty check for validation."""
+        return bool(self.raw)
+
+    def __repr__(self) -> str:
+        if self.raw.startswith('keyring:'):
+            return f"SecretRef('keyring:***')"
+        if _ENV_VAR_RE.match(self.raw):
+            return f"SecretRef('{self.raw}')"
+        return "SecretRef('***')" if self.raw else "SecretRef('')"
 
 
 class CookieSessionInitializer:
@@ -62,13 +122,10 @@ class SystemConfig:
     verify: bool = True
     auth: str = 'basic'
 
-    # basic auth
-    user: str = ''
-    # password can be empty (some SAP dev systems allow passwordless accounts)
-    password: str = ''
-
-    # cookie auth
-    cookie: str = ''
+    # Credential fields — stored as SecretRef for deferred resolution.
+    user: SecretRef = field(default_factory=lambda: SecretRef(''))
+    password: SecretRef = field(default_factory=lambda: SecretRef(''))
+    cookie: SecretRef = field(default_factory=lambda: SecretRef(''))
 
     def __post_init__(self) -> None:
         if self.auth not in _VALID_AUTH_TYPES:
@@ -108,30 +165,14 @@ class ServerConfig:
             self.default_system = next(iter(self.systems))
 
 
-def _resolve_env_vars(value: Any) -> Any:
-    """Resolve ``$ENV_VAR`` references in string values."""
-
-    if not isinstance(value, str):
-        return value
-
-    match = _ENV_VAR_RE.match(value)
-    if not match:
-        return value
-
-    var_name = match.group(1)
-    env_value = os.environ.get(var_name)
-    if env_value is None:
-        raise ConfigError(
-            f"Environment variable '{var_name}' referenced in config is not set"
-        )
-    return env_value
+_SECRET_FIELDS = frozenset({'user', 'password', 'cookie'})
 
 
 def load_config(path: str) -> ServerConfig:
     """Load server configuration from a JSON file.
 
-    String values matching ``$ENV_VAR`` are replaced with the
-    corresponding environment variable at load time.
+    Credential fields (user, password, cookie) are wrapped in
+    :class:`SecretRef` for deferred resolution at connection time.
 
     Args:
         path: Path to the JSON configuration file.
@@ -161,9 +202,14 @@ def load_config(path: str) -> ServerConfig:
         if not isinstance(sys_raw, dict):
             raise ConfigError(f"System '{name}' must be a JSON object")
 
-        resolved = {k: _resolve_env_vars(v) for k, v in sys_raw.items()}
+        parsed: dict[str, Any] = {}
+        for k, v in sys_raw.items():
+            if k in _SECRET_FIELDS and isinstance(v, str):
+                parsed[k] = SecretRef(v)
+            else:
+                parsed[k] = v
         try:
-            systems[name] = SystemConfig(**resolved)
+            systems[name] = SystemConfig(**parsed)
         except (TypeError, ConfigError) as exc:
             raise ConfigError(
                 f"System '{name}': {exc}"
@@ -282,7 +328,7 @@ class ConnectionManager:
             'ashost': sys_config.ashost,
             'port': sys_config.port,
             'client': sys_config.client,
-            'user': sys_config.user,
+            'user': sys_config.user.resolve() or '',
             'ssl': sys_config.ssl,
             'verify': sys_config.verify,
         }
@@ -296,8 +342,8 @@ class ConnectionManager:
             port=sys_config.port,
             ssl=sys_config.ssl,
             verify=sys_config.verify,
-            user=sys_config.user or 'unused',
-            password=sys_config.password or 'unused',
+            user=sys_config.user.resolve() or 'unused',
+            password=sys_config.password.resolve() or 'unused',
             ssl_server_cert=None,
         )
 
@@ -306,13 +352,13 @@ class ConnectionManager:
 
         initializer = None
         if sys_config.auth == 'cookie':
-            initializer = CookieSessionInitializer(sys_config.cookie)
+            initializer = CookieSessionInitializer(sys_config.cookie.resolve())
 
         return sap.adt.Connection(
             host=sys_config.ashost,
             client=sys_config.client,
-            user=sys_config.user or 'unused',
-            password=sys_config.password or 'unused',
+            user=sys_config.user.resolve() or 'unused',
+            password=sys_config.password.resolve() or 'unused',
             port=sys_config.port,
             ssl=sys_config.ssl,
             verify=sys_config.verify,

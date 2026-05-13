@@ -3,7 +3,6 @@
 Requires: pip install -e . (or uv pip install -e .)
 
 This is a convenience launcher that:
-- Sets SAP_COOKIE_I7D placeholder if not provided (prevents config loader failure)
 - Captures stderr to a temp file (required for clean MCP stdio transport)
   and displays it only on non-zero exit (so startup errors are visible)
 - Defaults to --stdio --experimental with local sapcli-mcp.json config
@@ -20,9 +19,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 
 def main():
-    if not os.environ.get('SAP_COOKIE_I7D'):
-        os.environ['SAP_COOKIE_I7D'] = 'NOT_SET'
-
     config = os.path.join(HERE, 'sapcli-mcp.json')
 
     # Capture stderr to a file so MCP stdio transport stays clean,
