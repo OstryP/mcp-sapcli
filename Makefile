@@ -11,7 +11,7 @@ lint: run_mypy run_pylint run_flake8
 	@echo Linted
 
 test:
-	pytest tests/
+	pytest tests/ --cov=sapclimcp --cov-report=term-missing
 
 check: lint test
 	@echo Checked
