@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
+from sap.http.errors import UnauthorizedError
 
 from sapclimcp.config import (
     KEYRING_SERVICE,
@@ -17,7 +18,6 @@ from sapclimcp.config import (
     SystemConfig,
     load_config,
 )
-from sap.http.errors import UnauthorizedError
 
 # ---------------------------------------------------------------------------
 # SecretRef
@@ -172,6 +172,14 @@ class TestCookieSessionInitializer:
     def test_cookie_string_without_equals_raises_config_error(self):
         with pytest.raises(ConfigError, match="parsed to zero entries"):
             CookieSessionInitializer("just_a_token_no_equals")
+
+    def test_leading_reserved_name_raises_config_error(self):
+        """SimpleCookie treats 'max-age', 'path', 'domain', 'secure' etc. as
+        Morsel attributes, not cookie names. A string that starts with one of
+        them parses to zero entries — covered by the same error path as the
+        other malformed cases."""
+        with pytest.raises(ConfigError, match="parsed to zero entries"):
+            CookieSessionInitializer("max-age=3600")
 
 
 class TestLoadConfig:
