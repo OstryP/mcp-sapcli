@@ -104,19 +104,28 @@ class CookieSessionInitializer:
     """
 
     def __init__(self, cookie: str) -> None:
-        self._cookie = cookie
+        # Parse once at construction time so malformed cookies fail loudly
+        # at connection setup, not silently at first ADT request.
+        sc = SimpleCookie()
+        sc.load(cookie)
+        self._parsed: dict[str, str] = {name: morsel.value for name, morsel in sc.items()}
+        if not self._parsed:
+            raise ConfigError(
+                "Cookie auth: cookie string parsed to zero entries. "
+                "Expected 'name1=value1; name2=value2; ...'. "
+                "Common causes: empty/whitespace-only string, missing '=' separator, "
+                "or a leading reserved attribute name (max-age, path, domain, ...) "
+                "that SimpleCookie treats as a directive instead of a cookie."
+            )
 
     def initialize_session(self, session: requests.Session) -> requests.Session:
         session.auth = None
-        # Parse a "name1=v1; name2=v2" cookie string and load each pair into
-        # the session jar without a domain/path so requests sends them on
-        # every call through this session. Server-set cookies (notably
-        # sap-contextid) accumulate alongside, preserving the stateful
-        # ADT session across lock/write/unlock.
-        sc = SimpleCookie()
-        sc.load(self._cookie)
-        for name, morsel in sc.items():
-            session.cookies.set(name, morsel.value)
+        # Load each name=value pair into the session jar without a domain/path
+        # so requests sends them on every call through this session.
+        # Server-set cookies (notably sap-contextid) accumulate alongside,
+        # preserving the stateful ADT session across lock/write/unlock.
+        for name, value in self._parsed.items():
+            session.cookies.set(name, value)
         return session
 
     def build_unauthorized_error(self, req, res) -> UnauthorizedError:
