@@ -386,7 +386,11 @@ class TestConnectionManager:
         session = req.Session()
         result = initializer.initialize_session(session)
         assert result.auth is None
-        assert result.headers["Cookie"] == "SAP_SESSION=abc"
+        # Cookie goes into the jar (not headers["Cookie"]) so that server-set
+        # cookies like sap-contextid can join them and be echoed back —
+        # essential for ADT's stateful lock/unlock to land on the same session.
+        assert result.cookies.get("SAP_SESSION") == "abc"
+        assert "Cookie" not in result.headers
 
         # Verify build_unauthorized_error returns proper error type
         from sap.http.errors import UnauthorizedError
@@ -395,6 +399,47 @@ class TestConnectionManager:
         mock_res = MagicMock()
         err = initializer.build_unauthorized_error(mock_req, mock_res)
         assert isinstance(err, UnauthorizedError)
+
+    def test_cookie_initializer_parses_multiple_cookies(self):
+        """A 'name1=v1; name2=v2' input string is split into separate jar entries."""
+        from sapclimcp.config import CookieSessionInitializer
+
+        initializer = CookieSessionInitializer(
+            "SAP_SESSIONID_X=abc; sap-usercontext=sap-client=815"
+        )
+        import requests as req
+
+        session = initializer.initialize_session(req.Session())
+        assert session.cookies.get("SAP_SESSIONID_X") == "abc"
+        assert session.cookies.get("sap-usercontext") == "sap-client=815"
+
+    def test_cookie_initializer_preserves_server_set_cookies(self):
+        """Regression: server-issued cookies (e.g. sap-contextid) must be echoed
+        back on subsequent requests. Setting headers['Cookie'] would override
+        the jar and silently drop them, breaking ADT's stateful lock/unlock."""
+        from sapclimcp.config import CookieSessionInitializer
+
+        initializer = CookieSessionInitializer("SAP_SESSIONID_X=abc")
+        import requests as req
+
+        session = initializer.initialize_session(req.Session())
+
+        # Simulate the server setting sap-contextid on a response
+        session.cookies.set("sap-contextid", "SID:ANON:host_X_00:context-token")
+
+        # Build a prepared request the way requests would for any subsequent
+        # API call and verify both cookies appear in the outgoing Cookie header.
+        from requests.models import PreparedRequest
+
+        pr = PreparedRequest()
+        pr.prepare(
+            method="POST",
+            url="https://example.invalid/sap/bc/adt/oo/classes/cl_x",
+            cookies=session.cookies,
+        )
+        cookie_header = pr.headers.get("Cookie", "")
+        assert "SAP_SESSIONID_X=abc" in cookie_header
+        assert "sap-contextid=" in cookie_header
 
     @patch("sap.adt.Connection")
     def test_basic_auth_no_session_initializer(self, mock_conn_cls):
@@ -433,7 +478,7 @@ class TestConnectionManager:
     def test_keyring_resolved_at_connection_time(self, mock_conn_cls, mock_keyring):
         """keyring: references are resolved when creating a connection, not at load time."""
         mock_conn_cls.return_value = MagicMock()
-        mock_keyring.return_value = "fresh_cookie_value"
+        mock_keyring.return_value = "SAP_SESSIONID_X=fresh"
 
         mgr = self._make_manager(auth="cookie", cookie="keyring:I7D")
         # Keyring should NOT have been consulted yet (deferred resolution)
@@ -449,14 +494,14 @@ class TestConnectionManager:
 
         session = req.Session()
         initializer.initialize_session(session)
-        assert session.headers["Cookie"] == "fresh_cookie_value"
+        assert session.cookies.get("SAP_SESSIONID_X") == "fresh"
 
     @patch("keyring.get_password")
     @patch("sap.adt.Connection")
     def test_keyring_re_resolved_after_eviction(self, mock_conn_cls, mock_keyring):
         """After eviction, keyring is re-read to get a fresh credential."""
         mock_conn_cls.return_value = MagicMock()
-        mock_keyring.side_effect = ["old_cookie", "new_cookie"]
+        mock_keyring.side_effect = ["SAP_SESSIONID_X=old", "SAP_SESSIONID_X=new"]
 
         mgr = self._make_manager(auth="cookie", cookie="keyring:I7D")
         mgr.get_connection("DEV", "adt")
@@ -471,7 +516,7 @@ class TestConnectionManager:
 
         session = req.Session()
         initializer.initialize_session(session)
-        assert session.headers["Cookie"] == "new_cookie"
+        assert session.cookies.get("SAP_SESSIONID_X") == "new"
 
 
 # ---------------------------------------------------------------------------
