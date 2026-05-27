@@ -16,6 +16,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
+from http.cookies import SimpleCookie
 from types import SimpleNamespace
 from typing import Any, Optional
 
@@ -90,14 +91,41 @@ class CookieSessionInitializer:
 
     Implements the sap.http.client.HTTPSessionInitializer protocol so that
     sapcli uses cookie-based auth instead of basic auth for the session.
+
+    Cookies are loaded into the session's cookie jar (not into the static
+    ``Cookie`` header). This is critical: ADT issues a ``sap-contextid``
+    cookie on the first stateful request and expects clients to echo it
+    back on follow-up calls so they land on the same server-side session.
+    Setting ``session.headers["Cookie"]`` overrides the cookie jar in
+    requests, so server-set cookies would be silently dropped — causing
+    e.g. a write's ``UNLOCK`` to land on a different stateful session
+    than the corresponding ``LOCK``, which leaves the underlying ENQUEUE
+    lock orphaned.
     """
 
     def __init__(self, cookie: str) -> None:
-        self._cookie = cookie
+        # Parse once at construction time so malformed cookies fail loudly
+        # at connection setup, not silently at first ADT request.
+        sc = SimpleCookie()
+        sc.load(cookie)
+        self._parsed: dict[str, str] = {name: morsel.value for name, morsel in sc.items()}
+        if not self._parsed:
+            raise ConfigError(
+                "Cookie auth: cookie string parsed to zero entries. "
+                "Expected 'name1=value1; name2=value2; ...'. "
+                "Common causes: empty/whitespace-only string, missing '=' separator, "
+                "or a leading reserved attribute name (max-age, path, domain, ...) "
+                "that SimpleCookie treats as a directive instead of a cookie."
+            )
 
     def initialize_session(self, session: requests.Session) -> requests.Session:
         session.auth = None
-        session.headers["Cookie"] = self._cookie
+        # Load each name=value pair into the session jar without a domain/path
+        # so requests sends them on every call through this session.
+        # Server-set cookies (notably sap-contextid) accumulate alongside,
+        # preserving the stateful ADT session across lock/write/unlock.
+        for name, value in self._parsed.items():
+            session.cookies.set(name, value)
         return session
 
     def build_unauthorized_error(self, req, res) -> UnauthorizedError:

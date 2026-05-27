@@ -5,11 +5,14 @@ import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
+from sap.http.errors import UnauthorizedError
 
 from sapclimcp.config import (
     KEYRING_SERVICE,
     ConfigError,
     ConnectionManager,
+    CookieSessionInitializer,
     SecretRef,
     ServerConfig,
     SystemConfig,
@@ -94,6 +97,89 @@ def _write_json(tmp_path, data: dict) -> str:
     path = tmp_path / "config.json"
     path.write_text(json.dumps(data), encoding="utf-8")
     return str(path)
+
+
+# ---------------------------------------------------------------------------
+# CookieSessionInitializer
+# ---------------------------------------------------------------------------
+
+
+class TestCookieSessionInitializer:
+    def test_parses_multiple_cookies_into_jar(self):
+        """A 'name1=v1; name2=v2' input string is split into separate jar entries."""
+        initializer = CookieSessionInitializer(
+            "SAP_SESSIONID_X=abc; sap-usercontext=sap-client=815"
+        )
+
+        session = initializer.initialize_session(requests.Session())
+        assert session.cookies.get("SAP_SESSIONID_X") == "abc"
+        assert session.cookies.get("sap-usercontext") == "sap-client=815"
+
+    def test_does_not_set_cookie_header(self):
+        """Cookies must NOT be set on session.headers['Cookie'] — that would
+        override the jar in requests and silently drop server-set cookies."""
+        initializer = CookieSessionInitializer("SAP_SESSIONID_X=abc")
+
+        session = initializer.initialize_session(requests.Session())
+        assert "Cookie" not in session.headers
+
+    def test_clears_existing_basic_auth(self):
+        """Cookie auth must clear any pre-existing basic auth on the session."""
+        initializer = CookieSessionInitializer("SAP_SESSIONID_X=abc")
+        session = requests.Session()
+        session.auth = ("preexisting_user", "preexisting_password")
+
+        result = initializer.initialize_session(session)
+        assert result.auth is None
+
+    def test_preserves_server_set_cookies_through_session_prepare(self):
+        """Regression for PR #17: server-issued cookies (sap-contextid)
+        must accumulate in the jar and be echoed back on subsequent requests.
+
+        Uses ``session.prepare_request`` which exercises the same merge path
+        as ``session.send`` — including any ``headers["Cookie"]`` override.
+        Constructing a bare ``PreparedRequest`` would NOT catch a regression
+        where someone re-introduces ``session.headers["Cookie"]`` because
+        ``PreparedRequest.prepare`` ignores ``session.headers`` entirely.
+        """
+        initializer = CookieSessionInitializer("SAP_SESSIONID_X=abc")
+        session = initializer.initialize_session(requests.Session())
+
+        # Simulate the server setting sap-contextid on a response
+        session.cookies.set("sap-contextid", "SID:ANON:host_X_00:context-token")
+
+        prep = session.prepare_request(
+            requests.Request(
+                "POST",
+                "https://example.invalid/sap/bc/adt/oo/classes/cl_x",
+            )
+        )
+        cookie_header = prep.headers.get("Cookie", "")
+        assert "SAP_SESSIONID_X=abc" in cookie_header
+        assert "sap-contextid=" in cookie_header
+
+    def test_empty_cookie_string_raises_config_error(self):
+        """Empty / unparseable cookie strings fail loudly at construction
+        time so misconfiguration surfaces at config resolution rather than
+        as a deferred 401 on the first ADT call."""
+        with pytest.raises(ConfigError, match="parsed to zero entries"):
+            CookieSessionInitializer("")
+
+    def test_whitespace_only_cookie_string_raises_config_error(self):
+        with pytest.raises(ConfigError, match="parsed to zero entries"):
+            CookieSessionInitializer("   ")
+
+    def test_cookie_string_without_equals_raises_config_error(self):
+        with pytest.raises(ConfigError, match="parsed to zero entries"):
+            CookieSessionInitializer("just_a_token_no_equals")
+
+    def test_leading_reserved_name_raises_config_error(self):
+        """SimpleCookie treats 'max-age', 'path', 'domain', 'secure' etc. as
+        Morsel attributes, not cookie names. A string that starts with one of
+        them parses to zero entries — covered by the same error path as the
+        other malformed cases."""
+        with pytest.raises(ConfigError, match="parsed to zero entries"):
+            CookieSessionInitializer("max-age=3600")
 
 
 class TestLoadConfig:
@@ -366,7 +452,12 @@ class TestConnectionManager:
 
     @patch("sap.adt.Connection")
     def test_cookie_auth_uses_session_initializer(self, mock_conn_cls):
-        """Cookie auth passes CookieSessionInitializer to sap.adt.Connection."""
+        """Cookie auth passes a CookieSessionInitializer (with the resolved
+        cookie value) to sap.adt.Connection.
+
+        Behavior of the initializer itself is covered by
+        TestCookieSessionInitializer; this test only verifies wiring.
+        """
         mock_conn_cls.return_value = MagicMock()
 
         mgr = self._make_manager(auth="cookie", cookie="SAP_SESSION=abc")
@@ -376,24 +467,14 @@ class TestConnectionManager:
         kwargs = mock_conn_cls.call_args.kwargs
         initializer = kwargs["session_initializer"]
 
-        from sapclimcp.config import CookieSessionInitializer
-
         assert isinstance(initializer, CookieSessionInitializer)
 
-        # Verify initialize_session sets cookie and removes basic auth
-        import requests as req
+        # Sanity: confirm the resolved cookie value reached the initializer.
+        session = initializer.initialize_session(requests.Session())
+        assert session.cookies.get("SAP_SESSION") == "abc"
 
-        session = req.Session()
-        result = initializer.initialize_session(session)
-        assert result.auth is None
-        assert result.headers["Cookie"] == "SAP_SESSION=abc"
-
-        # Verify build_unauthorized_error returns proper error type
-        from sap.http.errors import UnauthorizedError
-
-        mock_req = MagicMock()
-        mock_res = MagicMock()
-        err = initializer.build_unauthorized_error(mock_req, mock_res)
+        # build_unauthorized_error returns the right exception type
+        err = initializer.build_unauthorized_error(MagicMock(), MagicMock())
         assert isinstance(err, UnauthorizedError)
 
     @patch("sap.adt.Connection")
@@ -433,7 +514,7 @@ class TestConnectionManager:
     def test_keyring_resolved_at_connection_time(self, mock_conn_cls, mock_keyring):
         """keyring: references are resolved when creating a connection, not at load time."""
         mock_conn_cls.return_value = MagicMock()
-        mock_keyring.return_value = "fresh_cookie_value"
+        mock_keyring.return_value = "SAP_SESSIONID_X=fresh"
 
         mgr = self._make_manager(auth="cookie", cookie="keyring:I7D")
         # Keyring should NOT have been consulted yet (deferred resolution)
@@ -445,18 +526,16 @@ class TestConnectionManager:
         kwargs = mock_conn_cls.call_args.kwargs
         initializer = kwargs["session_initializer"]
         # Verify the resolved cookie was used
-        import requests as req
-
-        session = req.Session()
+        session = requests.Session()
         initializer.initialize_session(session)
-        assert session.headers["Cookie"] == "fresh_cookie_value"
+        assert session.cookies.get("SAP_SESSIONID_X") == "fresh"
 
     @patch("keyring.get_password")
     @patch("sap.adt.Connection")
     def test_keyring_re_resolved_after_eviction(self, mock_conn_cls, mock_keyring):
         """After eviction, keyring is re-read to get a fresh credential."""
         mock_conn_cls.return_value = MagicMock()
-        mock_keyring.side_effect = ["old_cookie", "new_cookie"]
+        mock_keyring.side_effect = ["SAP_SESSIONID_X=old", "SAP_SESSIONID_X=new"]
 
         mgr = self._make_manager(auth="cookie", cookie="keyring:I7D")
         mgr.get_connection("DEV", "adt")
@@ -467,11 +546,9 @@ class TestConnectionManager:
         # Verify second connection used the fresh cookie
         second_call_kwargs = mock_conn_cls.call_args_list[1].kwargs
         initializer = second_call_kwargs["session_initializer"]
-        import requests as req
-
-        session = req.Session()
+        session = requests.Session()
         initializer.initialize_session(session)
-        assert session.headers["Cookie"] == "new_cookie"
+        assert session.cookies.get("SAP_SESSIONID_X") == "new"
 
 
 # ---------------------------------------------------------------------------
