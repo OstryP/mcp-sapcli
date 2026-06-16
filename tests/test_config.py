@@ -77,7 +77,7 @@ class TestSecretRef:
         installed), `keyring:` references must fail with a clear install
         hint, not an AttributeError on `None.get_password`."""
         ref = SecretRef("keyring:ANY_KEY")
-        with pytest.raises(ConfigError, match=r"pip install mcp-sapcli\[keyring\]"):
+        with pytest.raises(ConfigError, match=r"pip install -e \.\[keyring\]"):
             ref.resolve()
 
     @patch("sapclimcp.config.keyring", None)

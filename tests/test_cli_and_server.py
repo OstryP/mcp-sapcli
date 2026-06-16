@@ -86,6 +86,91 @@ class TestCreateMcpServer:
             "silently break callers"
         )
 
+    def test_warns_on_keyring_refs_without_keyring(self, tmp_path, caplog):
+        """If config references `keyring:` credentials but the keyring extra
+        is not installed, log a startup WARNING naming the affected systems
+        instead of waiting for the first connection to fail."""
+        import json
+        import logging
+
+        config_path = tmp_path / "cfg.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "systems": {
+                        "DEV": {
+                            "ashost": "h.example.com",
+                            "client": "100",
+                            "user": "u",
+                            "password": "p",
+                            "auth": "basic",
+                            "cookie": "keyring:DEV-cookie",
+                        },
+                        "QAS": {
+                            "ashost": "q.example.com",
+                            "client": "200",
+                            "auth": "cookie",
+                            "cookie": "keyring:QAS-cookie",
+                        },
+                    },
+                    "default_system": "DEV",
+                }
+            )
+        )
+        with (
+            patch("sapclimcp.config.keyring", None),
+            caplog.at_level(logging.WARNING, logger="sapclimcp.server"),
+        ):
+            create_mcp_server(config_path=str(config_path))
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert any("keyring" in r.getMessage() for r in warnings), (
+            f"Expected a keyring warning, got: {[r.getMessage() for r in warnings]}"
+        )
+        combined = " ".join(r.getMessage() for r in warnings)
+        # Both systems' keyring refs should be named so the user can locate them
+        assert "DEV.cookie" in combined
+        assert "QAS.cookie" in combined
+        assert "pip install -e .[keyring]" in combined
+
+    def test_no_warning_when_keyring_installed(self, tmp_path, caplog):
+        """No warning fires when keyring is available — the soft-import
+        sentinel is the trigger, not the presence of `keyring:` refs."""
+        import json
+        import logging
+
+        config_path = tmp_path / "cfg.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "systems": {
+                        "DEV": {
+                            "ashost": "h.example.com",
+                            "client": "100",
+                            "auth": "cookie",
+                            "cookie": "keyring:DEV-cookie",
+                        }
+                    }
+                }
+            )
+        )
+        # Stub keyring to a truthy MagicMock — config.keyring is not None
+        with (
+            patch("sapclimcp.config.keyring", MagicMock()),
+            caplog.at_level(logging.WARNING, logger="sapclimcp.server"),
+        ):
+            create_mcp_server(config_path=str(config_path))
+
+        keyring_warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "keyring" in r.getMessage()
+        ]
+        assert not keyring_warnings, (
+            f"No keyring warning expected when keyring is installed, got: "
+            f"{[r.getMessage() for r in keyring_warnings]}"
+        )
+
     def test_creates_server_with_name(self):
         server = create_mcp_server(name="test-server")
         assert server.name == "test-server"
@@ -394,20 +479,18 @@ class TestKeyringMissing:
         with pytest.raises(SystemExit) as exc_info:
             main(["credential", "set", "K", "v"])
         assert exc_info.value.code == 1
-        err = capsys.readouterr().err
-        assert "keyring" in err
-        assert "pip install mcp-sapcli[keyring]" in err
+        assert "pip install -e .[keyring]" in capsys.readouterr().err
 
     @patch("sapclimcp.cli.keyring", None)
     def test_get_exits_with_install_hint(self, capsys):
         with pytest.raises(SystemExit) as exc_info:
             main(["credential", "get", "K"])
         assert exc_info.value.code == 1
-        assert "pip install mcp-sapcli[keyring]" in capsys.readouterr().err
+        assert "pip install -e .[keyring]" in capsys.readouterr().err
 
     @patch("sapclimcp.cli.keyring", None)
     def test_delete_exits_with_install_hint(self, capsys):
         with pytest.raises(SystemExit) as exc_info:
             main(["credential", "delete", "K"])
         assert exc_info.value.code == 1
-        assert "pip install mcp-sapcli[keyring]" in capsys.readouterr().err
+        assert "pip install -e .[keyring]" in capsys.readouterr().err

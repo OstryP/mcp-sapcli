@@ -22,7 +22,7 @@ from typing import Any, Optional
 
 try:
     import keyring  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - exercised only without the extra installed
+except ImportError:
     # Soft-import: keyring is an optional dependency. When unavailable, the
     # `keyring:` SecretRef prefix raises a clear ConfigError pointing the user
     # at the install hint. `$ENV_VAR` and literal credentials still work.
@@ -33,7 +33,7 @@ import sap.adt
 import sap.cli
 from sap.http.errors import UnauthorizedError
 
-from sapclimcp.errors import ConfigError
+from sapclimcp.errors import ConfigError, format_keyring_missing
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,11 +63,7 @@ class SecretRef:
         if self.raw.startswith("keyring:"):
             key = self.raw[len("keyring:") :]
             if keyring is None:
-                raise ConfigError(
-                    f"Cannot resolve 'keyring:{key}': the 'keyring' package is "
-                    f"not installed. Install with `pip install mcp-sapcli[keyring]`, "
-                    f"or use a $ENV_VAR / literal credential instead."
-                )
+                raise ConfigError(format_keyring_missing(context=f"Cannot resolve 'keyring:{key}'"))
             value = keyring.get_password(KEYRING_SERVICE, key)
             if value is None:
                 raise ConfigError(

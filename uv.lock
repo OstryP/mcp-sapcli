@@ -925,7 +925,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastmcp" },
-    { name = "keyring" },
     { name = "pydantic" },
     { name = "pyodata" },
     { name = "sapcli" },
@@ -939,11 +938,14 @@ dev = [
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
+keyring = [
+    { name = "keyring" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "fastmcp" },
-    { name = "keyring" },
+    { name = "keyring", marker = "extra == 'keyring'" },
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "pydantic" },
     { name = "pyodata" },
@@ -953,7 +955,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "sapcli", git = "https://github.com/jfilak/sapcli.git?rev=555226a0fdea4b775b83fe1ef3b029993d141404" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["keyring", "dev"]
 
 [[package]]
 name = "mdurl"

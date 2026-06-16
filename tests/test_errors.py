@@ -1,8 +1,10 @@
 """Unit tests for sapclimcp.errors module."""
 
 from sapclimcp.errors import (
+    KEYRING_INSTALL_HINT,
     format_auth_error,
     format_connection_error,
+    format_keyring_missing,
     format_startup_error,
 )
 
@@ -30,6 +32,21 @@ class TestFormatAuthError:
         assert "after retry" in msg
         assert "SSO cookie" in msg
         assert "$ENV_VAR" in msg
+
+    def test_cookie_auth_action_covers_keyring_and_env_var(self):
+        """Refresh hint must cover both credential resolution modes — telling
+        a $ENV_VAR user to run `sapcli-mcp credential set` would itself fail
+        if keyring is not installed."""
+        msg = format_auth_error(
+            auth_type="cookie",
+            system_name="DEV",
+            host="dev.sap.example.com",
+        )
+        assert "keyring" in msg
+        assert "$ENV_VAR" in msg
+        # Mentions the install-hint constant so users without keyring know
+        # how to switch on the credential CLI:
+        assert KEYRING_INSTALL_HINT in msg
 
     def test_basic_auth_mentions_user_password(self):
         msg = format_auth_error(
@@ -182,3 +199,29 @@ class TestFormatStartupError:
         assert "RuntimeError" in msg
         assert "something broke" in msg
         assert "bug" in msg
+
+
+class TestFormatKeyringMissing:
+    """Tests for the centralized keyring-missing message used by both
+    cli.py (credential subcommands) and config.py (SecretRef)."""
+
+    def test_install_hint_constant_uses_editable_install(self):
+        """Project is git-installed (not on PyPI) — hint must use the
+        editable form so users can copy-paste."""
+        assert KEYRING_INSTALL_HINT == "pip install -e .[keyring]"
+
+    def test_message_without_context(self):
+        msg = format_keyring_missing()
+        assert "keyring" in msg
+        assert KEYRING_INSTALL_HINT in msg
+
+    def test_message_with_context(self):
+        msg = format_keyring_missing(context="Cannot resolve 'keyring:DEV'")
+        assert msg.startswith("Cannot resolve 'keyring:DEV': ")
+        assert KEYRING_INSTALL_HINT in msg
+
+    def test_message_mentions_alternative_resolution_modes(self):
+        msg = format_keyring_missing()
+        # Without the [keyring] extra, both $ENV_VAR and literal credentials
+        # are still functional. The user-facing message should make that clear.
+        assert "$ENV_VAR" in msg or "literal" in msg

@@ -72,7 +72,8 @@ all resolved lazily at connection time (not at startup):
 | `$ENV_VAR` | Environment variable | `"$SAP_COOKIE_DEV"` |
 | literal | Used as-is | `"Welcome1!"` |
 
-Manage keyring credentials with the built-in CLI:
+Manage keyring credentials with the built-in CLI (requires the
+`[keyring]` extra — see [Optional: OS keyring support](#optional-os-keyring-support)):
 
 ```bash
 sapcli-mcp credential set DEV "SAP_SESSIONID=abc123; sap-usercontext=sap-client=001"

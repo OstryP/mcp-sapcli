@@ -7,26 +7,22 @@ import sys
 
 try:
     import keyring  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - exercised only without the extra installed
+except ImportError:
     # Soft-import: keyring is an optional dependency. The `credential` subcommands
     # raise a clear, actionable error when invoked without it installed.
     keyring = None  # type: ignore[assignment]
 
 from sapclimcp.config import KEYRING_SERVICE
-from sapclimcp.errors import format_startup_error
+from sapclimcp.errors import format_keyring_missing, format_startup_error
 from sapclimcp.server import create_mcp_server
 
 _VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-
-_KEYRING_MISSING_MSG = (
-    "The 'keyring' package is not installed. Install with: pip install mcp-sapcli[keyring]"
-)
 
 
 def _require_keyring() -> None:
     """Exit with a clear message if keyring is not installed."""
     if keyring is None:
-        print(_KEYRING_MISSING_MSG, file=sys.stderr)
+        print(format_keyring_missing(), file=sys.stderr)
         sys.exit(1)
 
 
@@ -54,10 +50,15 @@ def _credential_get(args: argparse.Namespace) -> None:
 def _credential_delete(args: argparse.Namespace) -> None:
     """Delete a credential from the OS keyring."""
     _require_keyring()
+    # Defer the keyring.errors lookup until after _require_keyring() has
+    # confirmed `keyring is not None` — keeps the no-keyring code path
+    # free of attribute access on the soft-imported module.
+    from keyring.errors import PasswordDeleteError
+
     try:
         keyring.delete_password(KEYRING_SERVICE, args.key)
         print(f"Deleted credential: {args.key}")
-    except keyring.errors.PasswordDeleteError:
+    except PasswordDeleteError:
         print(f"No credential found for key: {args.key}", file=sys.stderr)
         sys.exit(1)
 

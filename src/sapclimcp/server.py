@@ -4,7 +4,11 @@ This module contains the server creation logic, importable from the
 package without module-level side effects.
 """
 
+import logging
+
 from fastmcp import FastMCP
+
+_LOGGER = logging.getLogger(__name__)
 
 # List of verified and supported sapcli commands exposed as MCP tools
 VERIFIED_COMMANDS = [
@@ -78,6 +82,7 @@ def create_mcp_server(
         from sapclimcp.config import ConnectionManager, load_config
 
         server_config = load_config(config_path)
+        _warn_if_keyring_refs_without_keyring(server_config)
         connection_manager = ConnectionManager(server_config)
         instructions = MCP_SERVER_INSTRUCTIONS_MANAGED.format(
             systems=", ".join(connection_manager.system_names),
@@ -95,3 +100,32 @@ def create_mcp_server(
 
     transform_sapcli_commands(mcp, allowed_commands, connection_manager=connection_manager)
     return mcp
+
+
+def _warn_if_keyring_refs_without_keyring(server_config) -> None:
+    """Log a warning if any system references a `keyring:` credential
+    while the `keyring` package is not installed.
+
+    Catches the misconfiguration at startup rather than at first ADT
+    request, so users see the problem before connection attempts fail.
+    """
+    # Late import: keyring is the soft-imported module attribute on config.
+    from sapclimcp import config as _config
+
+    if _config.keyring is not None:
+        return
+
+    affected = []
+    for name, sys_cfg in server_config.systems.items():
+        for field_name in ("user", "password", "cookie"):
+            secret_ref = getattr(sys_cfg, field_name)
+            if secret_ref.raw.startswith("keyring:"):
+                affected.append(f"{name}.{field_name}")
+
+    if affected:
+        _LOGGER.warning(
+            "Config references keyring credentials but the 'keyring' package "
+            "is not installed; these will fail at first connection: %s. "
+            "Install with: pip install -e .[keyring]",
+            ", ".join(affected),
+        )
