@@ -100,11 +100,13 @@ jobs:
         run: uv run mypy src/sapclimcp/ --ignore-missing-imports
 
   install:
-    name: Install & Verify · ${{ matrix.os }}
+    name: Install & Verify · ${{ matrix.os }} · extras=${{ matrix.extras }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+        extras: [none, keyring]
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -117,28 +119,46 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f # v4
 
-      # ─── Default install (no keyring extra) ────────────────────────
-      # Exercises the soft-import fallback path: the package must be
-      # importable, the CLI must run, and `keyring:` SecretRefs must
-      # raise the install hint instead of crashing on ImportError.
-      - name: Install package from source (default — no keyring)
+      # Each (os, extras) combination installs into its own fresh venv.
+      # Independent green/red signal per platform × extras dimension —
+      # a regression in the no-keyring path cannot be masked by a
+      # subsequent reinstall in the same job.
+      - name: Install package (extras=${{ matrix.extras }})
+        shell: bash
         run: |
           uv venv
-          uv pip install .
+          if [ "${{ matrix.extras }}" = "keyring" ]; then
+            uv pip install -e ".[keyring]"
+          else
+            uv pip install .
+          fi
 
-      - name: CLI entry point works (no keyring)
+      - name: Read install hint from package constant
+        id: hint
+        shell: bash
+        run: |
+          hint=$(uv run python -c "from sapclimcp.errors import KEYRING_INSTALL_HINT; print(KEYRING_INSTALL_HINT)")
+          echo "value=$hint" >> "$GITHUB_OUTPUT"
+
+      - name: CLI entry point works
+        shell: bash
         run: uv run sapcli-mcp --help
 
-      - name: Credential CLI parser works (no keyring)
+      - name: Credential CLI parser works
+        shell: bash
         run: uv run sapcli-mcp credential --help
 
-      - name: All modules importable (no keyring)
+      # ─── Verification specific to extras=none ──────────────────────
+      - name: Soft-import sentinels are None (extras=none)
+        if: matrix.extras == 'none'
+        shell: bash
         run: |
-          uv run python -c "from sapclimcp.config import SecretRef, KEYRING_SERVICE, keyring; assert keyring is None, 'keyring should be None in default install'; print('config: OK, keyring soft-import is None as expected')"
+          uv run python -c "from sapclimcp.config import SecretRef, KEYRING_SERVICE, is_keyring_available; assert not is_keyring_available(); print('config: OK')"
           uv run python -c "from sapclimcp.cli import main, keyring; assert keyring is None; print('cli: OK')"
           uv run python -c "from sapclimcp.server import create_mcp_server; print('server: OK')"
 
-      - name: Credential subcommands fail gracefully without keyring
+      - name: Credential subcommands fail gracefully (extras=none)
+        if: matrix.extras == 'none'
         shell: bash
         run: |
           set +e
@@ -149,32 +169,39 @@ jobs:
             echo "::error::credential set should have failed without keyring (rc=$rc)"
             exit 1
           fi
-          echo "$out" | grep -q "pip install -e .\[keyring\]" || {
-            echo "::error::expected install hint in stderr, got: $out"
+          echo "$out" | grep -qF "${{ steps.hint.outputs.value }}" || {
+            echo "::error::expected install hint '${{ steps.hint.outputs.value }}' in stderr, got: $out"
             exit 1
           }
           echo "OK: keyring-missing install hint surfaced"
 
-      - name: SecretRef keyring: prefix raises ConfigError without keyring
+      - name: SecretRef keyring prefix raises ConfigError (extras=none)
+        if: matrix.extras == 'none'
+        shell: bash
         run: |
-          uv run python -c "from sapclimcp.config import SecretRef; from sapclimcp.errors import ConfigError;
+          uv run python <<'PY'
           import sys
+          from sapclimcp.config import SecretRef
+          from sapclimcp.errors import ConfigError, KEYRING_INSTALL_HINT
           try:
               SecretRef('keyring:X').resolve()
           except ConfigError as ex:
-              assert 'pip install -e .[keyring]' in str(ex), str(ex)
+              assert KEYRING_INSTALL_HINT in str(ex), str(ex)
               print('OK: SecretRef raises install hint')
               sys.exit(0)
-          sys.exit('ConfigError not raised')"
+          sys.exit('ConfigError not raised')
+          PY
 
-      # ─── Install WITH keyring extra ────────────────────────────────
-      # Validates the credential roundtrip works once the extra is in.
-      # Re-installs (force) so the venv has keyring this time.
-      - name: Install package with [keyring] extra
-        run: uv pip install -e ".[keyring]"
+      # ─── Verification specific to extras=keyring ───────────────────
+      - name: keyring is importable (extras=keyring)
+        if: matrix.extras == 'keyring'
+        shell: bash
+        run: |
+          uv run python -c "from sapclimcp.config import is_keyring_available; assert is_keyring_available(); print('config: keyring available')"
 
-      - name: Keyring credential roundtrip (Windows only)
-        if: runner.os == 'Windows'
+      - name: Keyring credential roundtrip (extras=keyring, Windows only)
+        if: matrix.extras == 'keyring' && runner.os == 'Windows'
+        shell: bash
         run: |
           uv run sapcli-mcp credential set ci-test-key "ci-test-value"
           uv run sapcli-mcp credential get ci-test-key

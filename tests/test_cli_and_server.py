@@ -1,6 +1,8 @@
 """Tests for sapclimcp.server and sapclimcp.cli."""
 
 import asyncio
+import json
+import logging
 import sys
 from io import StringIO
 from unittest.mock import MagicMock, patch
@@ -9,8 +11,23 @@ import pytest
 
 from sapclimcp.cli import main, parse_args
 from sapclimcp.config import KEYRING_SERVICE
-from sapclimcp.errors import ConfigError
+from sapclimcp.errors import KEYRING_INSTALL_HINT, ConfigError
 from sapclimcp.server import VERIFIED_COMMANDS, create_mcp_server
+
+
+def _write_config(tmp_path, systems: dict, default: str | None = None) -> str:
+    """Write a config JSON to tmp_path and return the path string.
+
+    Helper for tests that build small server configs to drive
+    `create_mcp_server(config_path=...)` — keeps the JSON shape in one
+    place so test bodies stay focused on assertions.
+    """
+    payload: dict = {"systems": systems}
+    if default is not None:
+        payload["default_system"] = default
+    path = tmp_path / "cfg.json"
+    path.write_text(json.dumps(payload))
+    return str(path)
 
 
 class TestParseArgs:
@@ -88,78 +105,77 @@ class TestCreateMcpServer:
 
     def test_warns_on_keyring_refs_without_keyring(self, tmp_path, caplog):
         """If config references `keyring:` credentials but the keyring extra
-        is not installed, log a startup WARNING naming the affected systems
-        instead of waiting for the first connection to fail."""
-        import json
-        import logging
-
-        config_path = tmp_path / "cfg.json"
-        config_path.write_text(
-            json.dumps(
-                {
-                    "systems": {
-                        "DEV": {
-                            "ashost": "h.example.com",
-                            "client": "100",
-                            "user": "u",
-                            "password": "p",
-                            "auth": "basic",
-                            "cookie": "keyring:DEV-cookie",
-                        },
-                        "QAS": {
-                            "ashost": "q.example.com",
-                            "client": "200",
-                            "auth": "cookie",
-                            "cookie": "keyring:QAS-cookie",
-                        },
-                    },
-                    "default_system": "DEV",
-                }
-            )
+        is not installed, log a startup WARNING with a count + install hint
+        (per-field detail goes to DEBUG so it doesn't leak credential layout
+        to MCP clients in stdio mode)."""
+        # NOTE: DEV intentionally has BOTH `auth: basic` (using user/password)
+        # AND a `keyring:`-prefixed `cookie` field. The scanner must catch
+        # keyring refs in *any* field, not just the auth-active one — a user
+        # might leave a stale cookie value in config while testing basic auth.
+        config_path = _write_config(
+            tmp_path,
+            systems={
+                "DEV": {
+                    "ashost": "h.example.com",
+                    "client": "100",
+                    "user": "u",
+                    "password": "p",
+                    "auth": "basic",
+                    "cookie": "keyring:DEV-cookie",
+                },
+                "QAS": {
+                    "ashost": "q.example.com",
+                    "client": "200",
+                    "auth": "cookie",
+                    "cookie": "keyring:QAS-cookie",
+                },
+            },
+            default="DEV",
         )
         with (
             patch("sapclimcp.config.keyring", None),
-            caplog.at_level(logging.WARNING, logger="sapclimcp.server"),
+            caplog.at_level(logging.DEBUG, logger="sapclimcp.server"),
         ):
-            create_mcp_server(config_path=str(config_path))
+            create_mcp_server(config_path=config_path)
 
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert any("keyring" in r.getMessage() for r in warnings), (
             f"Expected a keyring warning, got: {[r.getMessage() for r in warnings]}"
         )
-        combined = " ".join(r.getMessage() for r in warnings)
-        # Both systems' keyring refs should be named so the user can locate them
-        assert "DEV.cookie" in combined
-        assert "QAS.cookie" in combined
-        assert "pip install -e .[keyring]" in combined
+        warning_text = " ".join(r.getMessage() for r in warnings)
+        # Warning is summary-only: count + install hint (NO per-field detail).
+        assert "2" in warning_text, "warning should mention the affected count"
+        assert KEYRING_INSTALL_HINT in warning_text
+        assert "DEV.cookie" not in warning_text, (
+            "per-field detail must NOT appear at WARNING level (would leak "
+            "credential layout to stdio MCP clients)"
+        )
+
+        # Per-field detail belongs at DEBUG level — opt-in via --log-level=DEBUG
+        debug_text = " ".join(r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG)
+        assert "DEV.cookie" in debug_text
+        assert "QAS.cookie" in debug_text
 
     def test_no_warning_when_keyring_installed(self, tmp_path, caplog):
         """No warning fires when keyring is available — the soft-import
         sentinel is the trigger, not the presence of `keyring:` refs."""
-        import json
-        import logging
-
-        config_path = tmp_path / "cfg.json"
-        config_path.write_text(
-            json.dumps(
-                {
-                    "systems": {
-                        "DEV": {
-                            "ashost": "h.example.com",
-                            "client": "100",
-                            "auth": "cookie",
-                            "cookie": "keyring:DEV-cookie",
-                        }
-                    }
+        config_path = _write_config(
+            tmp_path,
+            systems={
+                "DEV": {
+                    "ashost": "h.example.com",
+                    "client": "100",
+                    "auth": "cookie",
+                    "cookie": "keyring:DEV-cookie",
                 }
-            )
+            },
         )
         # Stub keyring to a truthy MagicMock — config.keyring is not None
         with (
             patch("sapclimcp.config.keyring", MagicMock()),
             caplog.at_level(logging.WARNING, logger="sapclimcp.server"),
         ):
-            create_mcp_server(config_path=str(config_path))
+            create_mcp_server(config_path=config_path)
 
         keyring_warnings = [
             r
@@ -170,6 +186,65 @@ class TestCreateMcpServer:
             f"No keyring warning expected when keyring is installed, got: "
             f"{[r.getMessage() for r in keyring_warnings]}"
         )
+
+    def test_no_warning_when_no_keyring_refs(self, tmp_path, caplog):
+        """Without `keyring:` refs, the scanner is a no-op even when keyring
+        is not installed (covers the early-return path on empty refs)."""
+        config_path = _write_config(
+            tmp_path,
+            systems={
+                "DEV": {
+                    "ashost": "h.example.com",
+                    "client": "100",
+                    "user": "u",
+                    "password": "p",
+                    "auth": "basic",
+                }
+            },
+        )
+        with (
+            patch("sapclimcp.config.keyring", None),
+            caplog.at_level(logging.WARNING, logger="sapclimcp.server"),
+        ):
+            create_mcp_server(config_path=config_path)
+
+        keyring_warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "keyring" in r.getMessage()
+        ]
+        assert not keyring_warnings
+
+    def test_warning_counts_all_keyring_fields(self, tmp_path, caplog):
+        """All-three-fields-keyring-refs counts every reference, not just one
+        per system."""
+        config_path = _write_config(
+            tmp_path,
+            systems={
+                "DEV": {
+                    "ashost": "h.example.com",
+                    "client": "100",
+                    "user": "keyring:DEV-user",
+                    "password": "keyring:DEV-pass",
+                    "auth": "basic",
+                    "cookie": "keyring:DEV-cookie",
+                }
+            },
+        )
+        with (
+            patch("sapclimcp.config.keyring", None),
+            caplog.at_level(logging.DEBUG, logger="sapclimcp.server"),
+        ):
+            create_mcp_server(config_path=config_path)
+
+        warning_text = " ".join(
+            r.getMessage() for r in caplog.records if r.levelno == logging.WARNING
+        )
+        assert "3" in warning_text, "warning should count all 3 keyring refs"
+        debug_text = " ".join(r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG)
+        assert "DEV.user" in debug_text
+        assert "DEV.password" in debug_text
+        assert "DEV.cookie" in debug_text
 
     def test_creates_server_with_name(self):
         server = create_mcp_server(name="test-server")

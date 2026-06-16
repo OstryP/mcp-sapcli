@@ -18,7 +18,7 @@ class ConfigError(Exception):
 KEYRING_INSTALL_HINT = "pip install -e .[keyring]"
 
 
-def format_keyring_missing(*, context: str | None = None) -> str:
+def format_keyring_missing(context: str | None = None) -> str:
     """Format the canonical "keyring extra not installed" message.
 
     Centralizes the install hint so the wording stays consistent across
@@ -65,7 +65,9 @@ def format_auth_error(
             "For `keyring:<key>`: run `sapcli-mcp credential set <key> <fresh-cookie>` "
             f"(requires the [keyring] extra: {KEYRING_INSTALL_HINT}). "
             "For `$ENV_VAR`: update the variable and restart the server. "
-            "For a literal cookie in config: edit the config file and restart."
+            "For a literal cookie in config: edit the config file and restart "
+            "(consider migrating to keyring: or $ENV_VAR to avoid storing a "
+            "bearer-equivalent cookie in plaintext at rest)."
         )
     else:
         cause = "Invalid username or password, or the account is locked."

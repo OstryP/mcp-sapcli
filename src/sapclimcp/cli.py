@@ -50,6 +50,9 @@ def _credential_get(args: argparse.Namespace) -> None:
 def _credential_delete(args: argparse.Namespace) -> None:
     """Delete a credential from the OS keyring."""
     _require_keyring()
+    # Make the post-guard invariant machine-checkable: the deferred
+    # `from keyring.errors` below assumes `keyring is not None`.
+    assert keyring is not None
     # Defer the keyring.errors lookup until after _require_keyring() has
     # confirmed `keyring is not None` — keeps the no-keyring code path
     # free of attribute access on the soft-imported module.

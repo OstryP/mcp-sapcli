@@ -8,6 +8,8 @@ import logging
 
 from fastmcp import FastMCP
 
+from sapclimcp.errors import KEYRING_INSTALL_HINT
+
 _LOGGER = logging.getLogger(__name__)
 
 # List of verified and supported sapcli commands exposed as MCP tools
@@ -108,24 +110,28 @@ def _warn_if_keyring_refs_without_keyring(server_config) -> None:
 
     Catches the misconfiguration at startup rather than at first ADT
     request, so users see the problem before connection attempts fail.
-    """
-    # Late import: keyring is the soft-imported module attribute on config.
-    from sapclimcp import config as _config
 
-    if _config.keyring is not None:
+    The WARNING is intentionally summary-only (count + install hint) so
+    that in stdio mode, where Python's lastResort handler can route the
+    message to stderr and onward to the MCP client, we don't enumerate
+    the user's credential layout (system_name × field) over the wire.
+    Per-field detail is demoted to DEBUG, which only surfaces when the
+    operator explicitly opts in with --log-level=DEBUG.
+    """
+    from sapclimcp.config import is_keyring_available
+
+    if is_keyring_available():
         return
 
-    affected = []
-    for name, sys_cfg in server_config.systems.items():
-        for field_name in ("user", "password", "cookie"):
-            secret_ref = getattr(sys_cfg, field_name)
-            if secret_ref.raw.startswith("keyring:"):
-                affected.append(f"{name}.{field_name}")
+    refs = server_config.keyring_refs()
+    if not refs:
+        return
 
-    if affected:
-        _LOGGER.warning(
-            "Config references keyring credentials but the 'keyring' package "
-            "is not installed; these will fail at first connection: %s. "
-            "Install with: pip install -e .[keyring]",
-            ", ".join(affected),
-        )
+    _LOGGER.warning(
+        "Config references %d keyring credential(s) but the 'keyring' package "
+        "is not installed; these will fail at first connection. "
+        "Install with: %s",
+        len(refs),
+        KEYRING_INSTALL_HINT,
+    )
+    _LOGGER.debug("keyring-referencing fields: %s", ", ".join(refs))

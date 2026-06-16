@@ -63,7 +63,7 @@ class SecretRef:
         if self.raw.startswith("keyring:"):
             key = self.raw[len("keyring:") :]
             if keyring is None:
-                raise ConfigError(format_keyring_missing(context=f"Cannot resolve 'keyring:{key}'"))
+                raise ConfigError(format_keyring_missing(f"Cannot resolve 'keyring:{key}'"))
             value = keyring.get_password(KEYRING_SERVICE, key)
             if value is None:
                 raise ConfigError(
@@ -142,6 +142,7 @@ class CookieSessionInitializer:
 
 
 _VALID_AUTH_TYPES = frozenset({"basic", "cookie"})
+_SECRET_FIELDS = frozenset({"user", "password", "cookie"})
 
 
 @dataclass
@@ -193,8 +194,30 @@ class ServerConfig:
         if len(self.systems) == 1 and self.default_system is None:
             self.default_system = next(iter(self.systems))
 
+    def keyring_refs(self) -> list[str]:
+        """Return `<system>.<field>` paths for every secret field that
+        references the keyring.
 
-_SECRET_FIELDS = frozenset({"user", "password", "cookie"})
+        Single source of truth: the secret-field set is `_SECRET_FIELDS`
+        and the prefix is the same one `SecretRef.resolve()` matches on,
+        so adding a fourth credential field updates this method without
+        any change at the call site.
+        """
+        return [
+            f"{name}.{field_name}"
+            for name, sys_cfg in self.systems.items()
+            for field_name in _SECRET_FIELDS
+            if getattr(sys_cfg, field_name).raw.startswith("keyring:")
+        ]
+
+
+def is_keyring_available() -> bool:
+    """Whether the optional `keyring` package is installed.
+
+    Public seam over the soft-import sentinel in this module — callers
+    should not poke at the private `keyring` module attribute directly.
+    """
+    return keyring is not None
 
 
 def load_config(path: str) -> ServerConfig:
