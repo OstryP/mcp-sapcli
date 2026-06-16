@@ -240,6 +240,7 @@ class TestLoadConfig:
                         "client": "100",
                         "port": 443,
                         "user": "admin",
+                        "password": "p",
                     }
                 }
             },
@@ -298,8 +299,18 @@ class TestLoadConfig:
             tmp_path,
             {
                 "systems": {
-                    "DEV": {"ashost": "dev.example.com", "client": "100", "user": "u"},
-                    "QA": {"ashost": "qa.example.com", "client": "200", "user": "u"},
+                    "DEV": {
+                        "ashost": "dev.example.com",
+                        "client": "100",
+                        "user": "u",
+                        "password": "p",
+                    },
+                    "QA": {
+                        "ashost": "qa.example.com",
+                        "client": "200",
+                        "user": "u",
+                        "password": "p",
+                    },
                 },
                 "default_system": "DEV",
             },
@@ -313,8 +324,18 @@ class TestLoadConfig:
             tmp_path,
             {
                 "systems": {
-                    "DEV": {"ashost": "dev.example.com", "client": "100", "user": "u"},
-                    "QA": {"ashost": "qa.example.com", "client": "200", "user": "u"},
+                    "DEV": {
+                        "ashost": "dev.example.com",
+                        "client": "100",
+                        "user": "u",
+                        "password": "p",
+                    },
+                    "QA": {
+                        "ashost": "qa.example.com",
+                        "client": "200",
+                        "user": "u",
+                        "password": "p",
+                    },
                 },
             },
         )
@@ -326,7 +347,12 @@ class TestLoadConfig:
             tmp_path,
             {
                 "systems": {
-                    "DEV": {"ashost": "dev.example.com", "client": "100", "user": "u"},
+                    "DEV": {
+                        "ashost": "dev.example.com",
+                        "client": "100",
+                        "user": "u",
+                        "password": "p",
+                    },
                 },
                 "default_system": "NONEXISTENT",
             },
@@ -393,15 +419,23 @@ class TestLoadConfig:
 class TestServerConfig:
     def test_single_system_auto_default(self):
         cfg = ServerConfig(
-            systems={"DEV": SystemConfig(ashost="h", client="c", user=SecretRef("u"))}
+            systems={
+                "DEV": SystemConfig(
+                    ashost="h", client="c", user=SecretRef("u"), password=SecretRef("p")
+                )
+            }
         )
         assert cfg.default_system == "DEV"
 
     def test_multi_system_no_auto_default(self):
         cfg = ServerConfig(
             systems={
-                "A": SystemConfig(ashost="a", client="1", user=SecretRef("u")),
-                "B": SystemConfig(ashost="b", client="2", user=SecretRef("u")),
+                "A": SystemConfig(
+                    ashost="a", client="1", user=SecretRef("u"), password=SecretRef("p")
+                ),
+                "B": SystemConfig(
+                    ashost="b", client="2", user=SecretRef("u"), password=SecretRef("p")
+                ),
             }
         )
         assert cfg.default_system is None
@@ -593,8 +627,12 @@ class TestConnectionManager:
     def test_no_default_no_system_raises(self):
         cfg = ServerConfig(
             systems={
-                "A": SystemConfig(ashost="a", client="1", user=SecretRef("u")),
-                "B": SystemConfig(ashost="b", client="2", user=SecretRef("u")),
+                "A": SystemConfig(
+                    ashost="a", client="1", user=SecretRef("u"), password=SecretRef("p")
+                ),
+                "B": SystemConfig(
+                    ashost="b", client="2", user=SecretRef("u"), password=SecretRef("p")
+                ),
             },
         )
         mgr = ConnectionManager(cfg)
@@ -862,6 +900,19 @@ class TestSystemConfigValidation:
     def test_basic_auth_without_user_raises(self):
         with pytest.raises(ConfigError, match="non-empty"):
             SystemConfig(ashost="h", client="c", auth="basic", user=SecretRef(""))
+
+    def test_basic_auth_without_password_raises(self):
+        """B2: basic auth must reject empty password at config-load time
+        rather than silently substituting 'unused' and failing later at the
+        SAP layer."""
+        with pytest.raises(ConfigError, match=r"non-empty 'password'"):
+            SystemConfig(
+                ashost="h",
+                client="c",
+                auth="basic",
+                user=SecretRef("admin"),
+                password=SecretRef(""),
+            )
 
     def test_valid_basic_auth(self):
         cfg = SystemConfig(

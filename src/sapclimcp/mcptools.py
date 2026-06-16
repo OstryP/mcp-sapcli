@@ -187,6 +187,17 @@ def _run_sapcli_command(
             LogMessages=[str(ex), output_buffer.caperr],
             Contents=output_buffer.capout,
         )
+    except ValueError as ex:
+        # ValueError originates from input-validation in our tool patches
+        # (e.g. SourceDataPatch's "source_data must not be empty"). Treat
+        # it as a user-input error rather than letting it fall through to
+        # the broad except in SapcliCommandTool.run() which would wrap it
+        # as "likely a bug — check server logs".
+        return OperationResult(
+            Success=False,
+            LogMessages=[str(ex), output_buffer.caperr],
+            Contents=output_buffer.capout,
+        )
 
     return OperationResult(
         Success=True, LogMessages=[output_buffer.caperr], Contents=output_buffer.capout

@@ -46,7 +46,7 @@ MCP_SERVER_INSTRUCTIONS = """
     For ABAP functions you can use features that requires HTTP or RFC.
     Both HTTP and RFC requires:
     - ASHOST   : Application Server host name
-    - CLIENT   : ABAP Client (3 upper case letters+digits)
+    - CLIENT   : ABAP Client (3-digit number, e.g. 001, 100)
     - USER     : user name (case insensitive)
     - PASSWORD : password (case sensitive)
     For HTTP features (ADT, gCTS both use HTTP), you must provide:

@@ -168,6 +168,20 @@ class TestRunSapcliCommand:
         assert result.Contents == "test capture stdout\n"
         assert result.LogMessages == ["Command failed", "test capture stderr\n"]
 
+    def test_value_error_returns_user_error(self):
+        """B1 fix: ValueError from a tool patch (e.g. SourceDataPatch's
+        empty-source_data check) must be reported as a user error, not as
+        a "likely a bug" wrapper."""
+        mock_conn = MagicMock()
+
+        def mock_command(conn, args):
+            raise ValueError("source_data must not be empty")
+
+        result = mcptools._run_sapcli_command(mock_command, mock_conn, SimpleNamespace())
+
+        assert result.Success is False
+        assert "source_data must not be empty" in result.LogMessages[0]
+
 
 class TestSapcliCommandTool:
     """Tests for the class SapcliCommandTool"""
@@ -208,7 +222,7 @@ class TestSapcliCommandTool:
 
         sct = mcptools.SapcliCommandTool.from_argparser_tool(tool)
 
-        await sct.run(
+        result = await sct.run(
             {
                 "ashost": "localhost",
                 "client": "100",
@@ -219,6 +233,12 @@ class TestSapcliCommandTool:
                 "verify_ssl": False,
             }
         )
+
+        # B5 fix: assert that the callback actually ran successfully —
+        # without this, a refactor that bypasses execution would let
+        # `tester_tool_fn`'s asserts go uncovered and the test would
+        # silently pass.
+        assert result.structured_content["result"][0] is True
 
     @pytest.mark.asyncio
     @patch("sap.cli.adt_connection_from_args")
@@ -250,7 +270,7 @@ class TestSapcliCommandTool:
 
         sct = mcptools.SapcliCommandTool.from_argparser_tool(tool)
 
-        await sct.run(
+        result = await sct.run(
             {
                 "ashost": "localhost",
                 "client": "100",
@@ -261,6 +281,9 @@ class TestSapcliCommandTool:
                 "verify_ssl": False,
             }
         )
+
+        # B5 fix: see test_default_values above.
+        assert result.structured_content["result"][0] is True
 
     @pytest.mark.asyncio
     @patch("sap.cli.adt_connection_from_args")

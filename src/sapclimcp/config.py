@@ -177,8 +177,11 @@ class SystemConfig:
             )
         if self.auth == "cookie" and not self.cookie:
             raise ConfigError("Cookie auth requires a non-empty 'cookie' field")
-        if self.auth == "basic" and not self.user:
-            raise ConfigError("Basic auth requires a non-empty 'user' field")
+        if self.auth == "basic":
+            if not self.user:
+                raise ConfigError("Basic auth requires a non-empty 'user' field")
+            if not self.password:
+                raise ConfigError("Basic auth requires a non-empty 'password' field")
 
 
 @dataclass
