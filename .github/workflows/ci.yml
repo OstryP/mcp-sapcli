@@ -102,6 +102,14 @@ jobs:
   install:
     name: Install & Verify · ${{ matrix.os }} · extras=${{ matrix.extras }}
     runs-on: ${{ matrix.os }}
+    # `uv run` triggers `uv sync` by default, which would re-resolve the
+    # lockfile and reinstall packages — including `keyring`, which the
+    # extras=none jobs explicitly uninstall to verify the soft-import
+    # path. UV_NO_SYNC=1 makes every `uv run` invocation in this job
+    # use the venv as-is. The install step uses `uv pip install`
+    # (not `uv run`), so it's unaffected.
+    env:
+      UV_NO_SYNC: "1"
     strategy:
       fail-fast: false
       matrix:
@@ -139,7 +147,8 @@ jobs:
       # to verify the soft-import path actually works when keyring is
       # NOT importable — so explicitly uninstall it here. All subsequent
       # extras=none verification steps run in a genuinely no-keyring
-      # environment.
+      # environment (UV_NO_SYNC=1 at the job level prevents `uv run`
+      # from quietly re-syncing keyring back in).
       - name: Force-uninstall keyring (extras=none)
         if: matrix.extras == 'none'
         shell: bash
