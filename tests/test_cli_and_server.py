@@ -445,7 +445,11 @@ class TestCliMain:
         main(["--stdio", "--log-level", "DEBUG"])
 
         captured = capsys.readouterr()
-        assert "stdio" in captured.err
+        # Pin a substring distinctive to the actual log message
+        # ("may be visible to MCP client in stdio mode") so the test
+        # doesn't pass on unrelated rewordings that happen to contain
+        # the bare word "stdio".
+        assert "MCP client in stdio mode" in captured.err
 
     @patch("sapclimcp.cli.logging.basicConfig")
     @patch("sapclimcp.cli.create_mcp_server")

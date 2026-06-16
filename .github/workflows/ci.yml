@@ -133,6 +133,29 @@ jobs:
             uv pip install .
           fi
 
+      # `keyring` reaches the venv transitively via fastmcp →
+      # py-key-value-aio[keyring], so even a bare `uv pip install .` (no
+      # extras) leaves it importable. The whole point of extras=none is
+      # to verify the soft-import path actually works when keyring is
+      # NOT importable — so explicitly uninstall it here. All subsequent
+      # extras=none verification steps run in a genuinely no-keyring
+      # environment.
+      - name: Force-uninstall keyring (extras=none)
+        if: matrix.extras == 'none'
+        shell: bash
+        run: |
+          uv pip uninstall keyring
+          # Confirm: importing keyring must now fail.
+          uv run python -c "
+          try:
+              import keyring  # noqa: F401
+          except ImportError:
+              print('OK: keyring is uninstalled')
+          else:
+              import sys
+              sys.exit('FAIL: keyring still importable after uninstall')
+          "
+
       - name: Read install hint from package constant
         id: hint
         # Output is consumed only by the extras=none verification steps

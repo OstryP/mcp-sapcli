@@ -9,6 +9,7 @@ import requests
 from sap.http.errors import UnauthorizedError
 
 from sapclimcp.config import (
+    _SECRET_FIELDS,
     KEYRING_SERVICE,
     ConfigError,
     ConnectionManager,
@@ -90,6 +91,20 @@ class TestSecretRef:
     def test_literal_still_works_without_keyring(self):
         """Without keyring installed, literal credentials must still resolve."""
         assert SecretRef("plain_password").resolve() == "plain_password"
+
+    # ── is_keyring_ref property ────────────────────────────────────
+
+    def test_is_keyring_ref_for_keyring_prefix(self):
+        assert SecretRef("keyring:DEV").is_keyring_ref is True
+
+    def test_is_keyring_ref_for_env_var(self):
+        assert SecretRef("$MY_VAR").is_keyring_ref is False
+
+    def test_is_keyring_ref_for_literal(self):
+        assert SecretRef("plain_password").is_keyring_ref is False
+
+    def test_is_keyring_ref_for_empty(self):
+        assert SecretRef("").is_keyring_ref is False
 
     def test_repr_hides_literals(self):
         assert "***" in repr(SecretRef("password123"))
@@ -440,6 +455,12 @@ class TestServerConfig:
         """`_SECRET_FIELDS` is a tuple, so the iteration order is fixed at
         ('user', 'password', 'cookie') across processes — protect this
         contract since a future test could otherwise become flaky."""
+        # R4-1: pin the type contract so a frozenset regression fails fast
+        # rather than appearing as a flaky list-comparison failure.
+        assert isinstance(_SECRET_FIELDS, tuple), (
+            f"_SECRET_FIELDS must be a tuple for stable iteration order; "
+            f"got {type(_SECRET_FIELDS).__name__}"
+        )
         cfg = ServerConfig(
             systems={
                 "DEV": SystemConfig(
@@ -454,6 +475,40 @@ class TestServerConfig:
         )
         # Field order matches _SECRET_FIELDS
         assert cfg.keyring_refs() == ["DEV.user", "DEV.password", "DEV.cookie"]
+
+    def test_keyring_refs_multi_system_outer_iteration_order(self):
+        """R4-3: multi-system case isolates the outer-loop ordering contract.
+        `dict.items()` preserves insertion order in Python 3.7+; combined
+        with the stable `_SECRET_FIELDS` tuple inner order, callers can
+        rely on a fully deterministic flattened order."""
+        cfg = ServerConfig(
+            systems={
+                "ALPHA": SystemConfig(
+                    ashost="a",
+                    client="1",
+                    auth="cookie",
+                    cookie=SecretRef("keyring:ALPHA-cookie"),
+                ),
+                "BETA": SystemConfig(
+                    ashost="b",
+                    client="2",
+                    user=SecretRef("keyring:BETA-user"),
+                    password=SecretRef("keyring:BETA-pass"),
+                ),
+                "GAMMA": SystemConfig(
+                    ashost="g",
+                    client="3",
+                    user=SecretRef("$ENV"),  # excluded — env var, not keyring
+                    password=SecretRef("literal"),  # excluded — literal
+                ),
+            }
+        )
+        # Flattened order: outer = systems insertion order, inner = _SECRET_FIELDS order
+        assert cfg.keyring_refs() == [
+            "ALPHA.cookie",
+            "BETA.user",
+            "BETA.password",
+        ]
 
 
 # ---------------------------------------------------------------------------
