@@ -121,6 +121,15 @@ sapcli-mcp --host 0.0.0.0 --port 9000
 | `--port`         | `8000`      | Port to listen on (HTTP mode only)                 |
 | `--log-level`    | (none)      | Logging level to stderr (env: `SAPCLI_MCP_LOG_LEVEL`) |
 
+> **Note on keyring scanner output.** When the server starts with a config
+> that references `keyring:<key>` credentials but the `[keyring]` extra is
+> not installed, a count-only WARNING fires (`Config references N keyring
+> credential(s)…`). The list of affected `<system>.<field>` paths is logged
+> at DEBUG level — pass `--log-level=DEBUG` (or `SAPCLI_MCP_LOG_LEVEL=DEBUG`)
+> to see the full detail. The split is intentional: the WARNING surfaces
+> reliably (Python's `lastResort` handler) while the per-field detail stays
+> opt-in to avoid leaking the credential layout to MCP clients in stdio mode.
+
 ### Legacy invocation
 
 The old invocation still works for backwards compatibility (requires the

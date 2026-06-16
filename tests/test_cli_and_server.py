@@ -3,10 +3,12 @@
 import asyncio
 import json
 import logging
+import re
 import sys
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
+import keyring.errors as kr_errors
 import pytest
 
 from sapclimcp.cli import main, parse_args
@@ -26,7 +28,9 @@ def _write_config(tmp_path, systems: dict, default: str | None = None) -> str:
     if default is not None:
         payload["default_system"] = default
     path = tmp_path / "cfg.json"
-    path.write_text(json.dumps(payload))
+    # Match `load_config`'s read encoding — Windows defaults to cp1252,
+    # so any non-ASCII data (hostname, password) would otherwise mismatch.
+    path.write_text(json.dumps(payload), encoding="utf-8")
     return str(path)
 
 
@@ -138,13 +142,20 @@ class TestCreateMcpServer:
         ):
             create_mcp_server(config_path=config_path)
 
-        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        warnings = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and r.name == "sapclimcp.server"
+        ]
         assert any("keyring" in r.getMessage() for r in warnings), (
             f"Expected a keyring warning, got: {[r.getMessage() for r in warnings]}"
         )
         warning_text = " ".join(r.getMessage() for r in warnings)
         # Warning is summary-only: count + install hint (NO per-field detail).
-        assert "2" in warning_text, "warning should mention the affected count"
+        # Use word boundaries to avoid matching e.g. "host2.example.com".
+        assert re.search(r"\b2\b", warning_text), (
+            "warning should mention the affected count as a standalone number"
+        )
         assert KEYRING_INSTALL_HINT in warning_text
         assert "DEV.cookie" not in warning_text, (
             "per-field detail must NOT appear at WARNING level (would leak "
@@ -152,7 +163,11 @@ class TestCreateMcpServer:
         )
 
         # Per-field detail belongs at DEBUG level — opt-in via --log-level=DEBUG
-        debug_text = " ".join(r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG)
+        debug_text = " ".join(
+            r.getMessage()
+            for r in caplog.records
+            if r.levelno == logging.DEBUG and r.name == "sapclimcp.server"
+        )
         assert "DEV.cookie" in debug_text
         assert "QAS.cookie" in debug_text
 
@@ -180,7 +195,9 @@ class TestCreateMcpServer:
         keyring_warnings = [
             r
             for r in caplog.records
-            if r.levelno == logging.WARNING and "keyring" in r.getMessage()
+            if r.levelno == logging.WARNING
+            and r.name == "sapclimcp.server"
+            and "keyring" in r.getMessage()
         ]
         assert not keyring_warnings, (
             f"No keyring warning expected when keyring is installed, got: "
@@ -211,9 +228,14 @@ class TestCreateMcpServer:
         keyring_warnings = [
             r
             for r in caplog.records
-            if r.levelno == logging.WARNING and "keyring" in r.getMessage()
+            if r.levelno == logging.WARNING
+            and r.name == "sapclimcp.server"
+            and "keyring" in r.getMessage()
         ]
-        assert not keyring_warnings
+        assert not keyring_warnings, (
+            f"No keyring warning expected when no keyring refs, got: "
+            f"{[r.getMessage() for r in keyring_warnings]}"
+        )
 
     def test_warning_counts_all_keyring_fields(self, tmp_path, caplog):
         """All-three-fields-keyring-refs counts every reference, not just one
@@ -238,10 +260,16 @@ class TestCreateMcpServer:
             create_mcp_server(config_path=config_path)
 
         warning_text = " ".join(
-            r.getMessage() for r in caplog.records if r.levelno == logging.WARNING
+            r.getMessage()
+            for r in caplog.records
+            if r.levelno == logging.WARNING and r.name == "sapclimcp.server"
         )
-        assert "3" in warning_text, "warning should count all 3 keyring refs"
-        debug_text = " ".join(r.getMessage() for r in caplog.records if r.levelno == logging.DEBUG)
+        assert re.search(r"\b3\b", warning_text), "warning should count all 3 keyring refs"
+        debug_text = " ".join(
+            r.getMessage()
+            for r in caplog.records
+            if r.levelno == logging.DEBUG and r.name == "sapclimcp.server"
+        )
         assert "DEV.user" in debug_text
         assert "DEV.password" in debug_text
         assert "DEV.cookie" in debug_text
@@ -387,8 +415,6 @@ class TestCliMain:
         mock_server = MagicMock()
         mock_create.return_value = mock_server
 
-        import logging
-
         main(["--stdio", "--log-level", "DEBUG"])
 
         mock_basic.assert_called_once()
@@ -410,7 +436,7 @@ class TestCliMain:
         mock_basic.assert_not_called()
 
     @patch("sapclimcp.cli.create_mcp_server")
-    def test_main_stdio_debug_logs_warning(self, mock_create, monkeypatch, capsys):
+    def test_main_stdio_debug_mode_logs_to_stderr(self, mock_create, monkeypatch, capsys):
         monkeypatch.delenv("SAPCLI_MCP_CONFIG", raising=False)
         monkeypatch.delenv("SAPCLI_MCP_LOG_LEVEL", raising=False)
         mock_server = MagicMock()
@@ -428,8 +454,6 @@ class TestCliMain:
         monkeypatch.setenv("SAPCLI_MCP_LOG_LEVEL", "warning")
         mock_server = MagicMock()
         mock_create.return_value = mock_server
-
-        import logging
 
         main(["--stdio"])
 
@@ -527,9 +551,11 @@ class TestCliCredential:
 
     @patch("sapclimcp.cli.keyring")
     def test_credential_delete_missing_exits(self, mock_keyring):
-        import keyring.errors as kr_errors
-
-        mock_keyring.errors = kr_errors
+        # The deferred `from keyring.errors import PasswordDeleteError` in
+        # _credential_delete resolves through sys.modules to the REAL
+        # installed `keyring` package, not via `mock_keyring.errors`.
+        # mock_keyring only stands in for the module-level `keyring`
+        # binding's `delete_password` call.
         mock_keyring.delete_password.side_effect = kr_errors.PasswordDeleteError("not found")
         with pytest.raises(SystemExit) as exc_info:
             main(["credential", "delete", "MISSING_KEY"])
@@ -554,18 +580,18 @@ class TestKeyringMissing:
         with pytest.raises(SystemExit) as exc_info:
             main(["credential", "set", "K", "v"])
         assert exc_info.value.code == 1
-        assert "pip install -e .[keyring]" in capsys.readouterr().err
+        assert KEYRING_INSTALL_HINT in capsys.readouterr().err
 
     @patch("sapclimcp.cli.keyring", None)
     def test_get_exits_with_install_hint(self, capsys):
         with pytest.raises(SystemExit) as exc_info:
             main(["credential", "get", "K"])
         assert exc_info.value.code == 1
-        assert "pip install -e .[keyring]" in capsys.readouterr().err
+        assert KEYRING_INSTALL_HINT in capsys.readouterr().err
 
     @patch("sapclimcp.cli.keyring", None)
     def test_delete_exits_with_install_hint(self, capsys):
         with pytest.raises(SystemExit) as exc_info:
             main(["credential", "delete", "K"])
         assert exc_info.value.code == 1
-        assert "pip install -e .[keyring]" in capsys.readouterr().err
+        assert KEYRING_INSTALL_HINT in capsys.readouterr().err

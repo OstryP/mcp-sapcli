@@ -38,6 +38,7 @@ from sapclimcp.errors import ConfigError, format_keyring_missing
 _LOGGER = logging.getLogger(__name__)
 
 _ENV_VAR_RE = re.compile(r"^\$([A-Za-z_][A-Za-z0-9_]*)$")
+_KEYRING_PREFIX = "keyring:"
 
 KEYRING_SERVICE = "sapcli-mcp"
 
@@ -58,10 +59,15 @@ class SecretRef:
 
     raw: str
 
+    @property
+    def is_keyring_ref(self) -> bool:
+        """True iff this reference resolves through the OS keyring."""
+        return self.raw.startswith(_KEYRING_PREFIX)
+
     def resolve(self) -> str:
         """Resolve the reference to its current value."""
-        if self.raw.startswith("keyring:"):
-            key = self.raw[len("keyring:") :]
+        if self.is_keyring_ref:
+            key = self.raw[len(_KEYRING_PREFIX) :]
             if keyring is None:
                 raise ConfigError(format_keyring_missing(f"Cannot resolve 'keyring:{key}'"))
             value = keyring.get_password(KEYRING_SERVICE, key)
@@ -88,7 +94,7 @@ class SecretRef:
         return bool(self.raw)
 
     def __repr__(self) -> str:
-        if self.raw.startswith("keyring:"):
+        if self.is_keyring_ref:
             return "SecretRef('keyring:***')"
         if _ENV_VAR_RE.match(self.raw):
             return f"SecretRef('{self.raw}')"
@@ -142,7 +148,9 @@ class CookieSessionInitializer:
 
 
 _VALID_AUTH_TYPES = frozenset({"basic", "cookie"})
-_SECRET_FIELDS = frozenset({"user", "password", "cookie"})
+# Tuple (not frozenset) for stable iteration order: `keyring_refs()` and the
+# scanner's DEBUG output should be reproducible across Python invocations.
+_SECRET_FIELDS = ("user", "password", "cookie")
 
 
 @dataclass
@@ -198,16 +206,17 @@ class ServerConfig:
         """Return `<system>.<field>` paths for every secret field that
         references the keyring.
 
-        Single source of truth: the secret-field set is `_SECRET_FIELDS`
-        and the prefix is the same one `SecretRef.resolve()` matches on,
-        so adding a fourth credential field updates this method without
-        any change at the call site.
+        Single source of truth: iterates `_SECRET_FIELDS` (a tuple, so
+        the order is stable across Python processes) and delegates the
+        prefix decision to `SecretRef.is_keyring_ref` so adding a
+        fourth credential field updates this method without any change
+        at the call site.
         """
         return [
             f"{name}.{field_name}"
             for name, sys_cfg in self.systems.items()
             for field_name in _SECRET_FIELDS
-            if getattr(sys_cfg, field_name).raw.startswith("keyring:")
+            if getattr(sys_cfg, field_name).is_keyring_ref
         ]
 
 
@@ -216,6 +225,13 @@ def is_keyring_available() -> bool:
 
     Public seam over the soft-import sentinel in this module — callers
     should not poke at the private `keyring` module attribute directly.
+
+    Note on placement: this is a module-level function while
+    `ServerConfig.keyring_refs()` is an instance method. The asymmetry
+    is intentional — keyring availability is a process-wide property
+    (set once when this module is first imported), while keyring refs
+    are a property of a particular config instance. Don't "fix" the
+    asymmetry by moving one to match the other.
     """
     return keyring is not None
 

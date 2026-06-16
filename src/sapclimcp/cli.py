@@ -29,6 +29,7 @@ def _require_keyring() -> None:
 def _credential_set(args: argparse.Namespace) -> None:
     """Store a credential in the OS keyring."""
     _require_keyring()
+    assert keyring is not None  # post-guard invariant for type-checker + readers
     value = args.value if args.value is not None else sys.stdin.readline().rstrip("\r\n")
     if not value:
         print("No value provided (pass as argument or pipe via stdin)", file=sys.stderr)
@@ -40,6 +41,7 @@ def _credential_set(args: argparse.Namespace) -> None:
 def _credential_get(args: argparse.Namespace) -> None:
     """Retrieve a credential from the OS keyring."""
     _require_keyring()
+    assert keyring is not None  # post-guard invariant for type-checker + readers
     value = keyring.get_password(KEYRING_SERVICE, args.key)
     if value is None:
         print(f"No credential found for key: {args.key}", file=sys.stderr)

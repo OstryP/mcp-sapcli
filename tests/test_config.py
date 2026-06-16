@@ -391,6 +391,70 @@ class TestServerConfig:
         )
         assert cfg.default_system is None
 
+    # ── keyring_refs() ──────────────────────────────────────────────
+
+    def test_keyring_refs_returns_empty_when_no_refs(self):
+        cfg = ServerConfig(
+            systems={
+                "DEV": SystemConfig(
+                    ashost="h",
+                    client="c",
+                    user=SecretRef("u"),
+                    password=SecretRef("p"),
+                )
+            }
+        )
+        assert cfg.keyring_refs() == []
+
+    def test_keyring_refs_returns_matching_fields(self):
+        cfg = ServerConfig(
+            systems={
+                "DEV": SystemConfig(
+                    ashost="h",
+                    client="c",
+                    auth="cookie",
+                    cookie=SecretRef("keyring:DEV-cookie"),
+                ),
+            }
+        )
+        assert cfg.keyring_refs() == ["DEV.cookie"]
+
+    def test_keyring_refs_excludes_non_keyring(self):
+        """Mixed config: only keyring-prefixed fields appear; literal and
+        $ENV_VAR refs are excluded."""
+        cfg = ServerConfig(
+            systems={
+                "MIXED": SystemConfig(
+                    ashost="h",
+                    client="c",
+                    user=SecretRef("$SAP_USER"),  # env var — NOT keyring
+                    password=SecretRef("literal-pass"),  # literal — NOT keyring
+                    auth="cookie",
+                    cookie=SecretRef("keyring:MIXED-cookie"),  # keyring — INCLUDED
+                ),
+            }
+        )
+        assert cfg.keyring_refs() == ["MIXED.cookie"]
+
+    def test_keyring_refs_iteration_order_is_stable(self):
+        """`_SECRET_FIELDS` is a tuple, so the iteration order is fixed at
+        ('user', 'password', 'cookie') across processes — protect this
+        contract since a future test could otherwise become flaky."""
+        cfg = ServerConfig(
+            systems={
+                "DEV": SystemConfig(
+                    ashost="h",
+                    client="c",
+                    user=SecretRef("keyring:DEV-user"),
+                    password=SecretRef("keyring:DEV-pass"),
+                    auth="cookie",
+                    cookie=SecretRef("keyring:DEV-cookie"),
+                ),
+            }
+        )
+        # Field order matches _SECRET_FIELDS
+        assert cfg.keyring_refs() == ["DEV.user", "DEV.password", "DEV.cookie"]
+
 
 # ---------------------------------------------------------------------------
 # ConnectionManager

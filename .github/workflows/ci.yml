@@ -135,6 +135,9 @@ jobs:
 
       - name: Read install hint from package constant
         id: hint
+        # Output is consumed only by the extras=none verification steps
+        # below — gate to avoid wasted work on the keyring matrix legs.
+        if: matrix.extras == 'none'
         shell: bash
         run: |
           hint=$(uv run python -c "from sapclimcp.errors import KEYRING_INSTALL_HINT; print(KEYRING_INSTALL_HINT)")
@@ -154,6 +157,9 @@ jobs:
         shell: bash
         run: |
           uv run python -c "from sapclimcp.config import SecretRef, KEYRING_SERVICE, is_keyring_available; assert not is_keyring_available(); print('config: OK')"
+          # Verify the soft-import mechanism directly (sentinel = None) — not
+          # via is_keyring_available(), because we want to catch a regression
+          # where the public API drifts from the underlying sentinel.
           uv run python -c "from sapclimcp.cli import main, keyring; assert keyring is None; print('cli: OK')"
           uv run python -c "from sapclimcp.server import create_mcp_server; print('server: OK')"
 

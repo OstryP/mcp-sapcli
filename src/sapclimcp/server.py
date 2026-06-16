@@ -4,11 +4,17 @@ This module contains the server creation logic, importable from the
 package without module-level side effects.
 """
 
+from __future__ import annotations
+
 import logging
+from typing import TYPE_CHECKING
 
 from fastmcp import FastMCP
 
 from sapclimcp.errors import KEYRING_INSTALL_HINT
+
+if TYPE_CHECKING:
+    from sapclimcp.config import ServerConfig
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -104,7 +110,7 @@ def create_mcp_server(
     return mcp
 
 
-def _warn_if_keyring_refs_without_keyring(server_config) -> None:
+def _warn_if_keyring_refs_without_keyring(server_config: ServerConfig) -> None:
     """Log a warning if any system references a `keyring:` credential
     while the `keyring` package is not installed.
 
