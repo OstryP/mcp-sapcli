@@ -19,8 +19,7 @@ from sapclimcp.server import create_mcp_server
 _VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
 _KEYRING_MISSING_MSG = (
-    "The 'keyring' package is not installed. "
-    "Install with: pip install mcp-sapcli[keyring]"
+    "The 'keyring' package is not installed. Install with: pip install mcp-sapcli[keyring]"
 )
 
 
