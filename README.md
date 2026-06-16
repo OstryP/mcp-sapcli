@@ -25,6 +25,21 @@ uv pip install -e .
 
 This installs the `sapcli-mcp` command and all dependencies (including sapcli from git).
 
+### Optional: OS keyring support
+
+To store credentials in the OS keyring (Windows Credential Manager, macOS
+Keychain, Linux Secret Service), install the optional `[keyring]` extra:
+
+```bash
+pip install -e .[keyring]
+# or:
+uv pip install -e .[keyring]
+```
+
+Without this extra, only `$ENV_VAR` and literal credential modes work; the
+`keyring:` prefix and the `sapcli-mcp credential` CLI subcommands raise a
+clear install hint.
+
 ## Usage
 
 ### With server-side connection management (recommended)
@@ -53,7 +68,7 @@ all resolved lazily at connection time (not at startup):
 
 | Syntax | Resolves via | Example |
 |--------|-------------|---------|
-| `keyring:<key>` | OS keyring (Windows Credential Manager, macOS Keychain, Linux Secret Service) | `"keyring:DEV"` |
+| `keyring:<key>` | OS keyring (Windows Credential Manager, macOS Keychain, Linux Secret Service) — requires the `[keyring]` install extra | `"keyring:DEV"` |
 | `$ENV_VAR` | Environment variable | `"$SAP_COOKIE_DEV"` |
 | literal | Used as-is | `"Welcome1!"` |
 

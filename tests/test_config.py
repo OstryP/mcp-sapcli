@@ -71,6 +71,26 @@ class TestSecretRef:
         with pytest.raises(ConfigError, match="MISSING_KEY"):
             ref.resolve()
 
+    @patch("sapclimcp.config.keyring", None)
+    def test_keyring_not_installed_raises_install_hint(self):
+        """When the `keyring` package is unavailable (optional extra not
+        installed), `keyring:` references must fail with a clear install
+        hint, not an AttributeError on `None.get_password`."""
+        ref = SecretRef("keyring:ANY_KEY")
+        with pytest.raises(ConfigError, match=r"pip install mcp-sapcli\[keyring\]"):
+            ref.resolve()
+
+    @patch("sapclimcp.config.keyring", None)
+    def test_env_var_still_works_without_keyring(self, monkeypatch):
+        """Without keyring installed, $ENV credentials must still resolve."""
+        monkeypatch.setenv("FALLBACK_SECRET", "ok")
+        assert SecretRef("$FALLBACK_SECRET").resolve() == "ok"
+
+    @patch("sapclimcp.config.keyring", None)
+    def test_literal_still_works_without_keyring(self):
+        """Without keyring installed, literal credentials must still resolve."""
+        assert SecretRef("plain_password").resolve() == "plain_password"
+
     def test_repr_hides_literals(self):
         assert "***" in repr(SecretRef("password123"))
         assert "password123" not in repr(SecretRef("password123"))

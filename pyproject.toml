@@ -11,13 +11,15 @@ license = "Apache-2.0"
 requires-python = ">=3.12"
 dependencies = [
     "fastmcp",
-    "keyring",
     "pydantic",
     "pyodata",
     "sapcli @ git+https://github.com/jfilak/sapcli.git@555226a0fdea4b775b83fe1ef3b029993d141404",
 ]
 
 [project.optional-dependencies]
+keyring = [
+    "keyring",
+]
 dev = [
     "pytest",
     "pytest-asyncio",

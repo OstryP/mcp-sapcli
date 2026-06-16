@@ -379,3 +379,35 @@ class TestCliCredential:
         with pytest.raises(SystemExit) as exc_info:
             main(["credential"])
         assert exc_info.value.code == 1
+
+
+class TestKeyringMissing:
+    """Tests for the soft-import fallback when keyring is not installed.
+
+    Simulates `import keyring` failure by patching `sapclimcp.cli.keyring`
+    to None — this is what the module-level try/except sets when the
+    optional `[keyring]` extra is not installed.
+    """
+
+    @patch("sapclimcp.cli.keyring", None)
+    def test_set_exits_with_install_hint(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            main(["credential", "set", "K", "v"])
+        assert exc_info.value.code == 1
+        err = capsys.readouterr().err
+        assert "keyring" in err
+        assert "pip install mcp-sapcli[keyring]" in err
+
+    @patch("sapclimcp.cli.keyring", None)
+    def test_get_exits_with_install_hint(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            main(["credential", "get", "K"])
+        assert exc_info.value.code == 1
+        assert "pip install mcp-sapcli[keyring]" in capsys.readouterr().err
+
+    @patch("sapclimcp.cli.keyring", None)
+    def test_delete_exits_with_install_hint(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            main(["credential", "delete", "K"])
+        assert exc_info.value.code == 1
+        assert "pip install mcp-sapcli[keyring]" in capsys.readouterr().err
