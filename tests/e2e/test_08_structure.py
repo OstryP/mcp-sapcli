@@ -102,7 +102,10 @@ class TestStructureLifecycle:
                     "system": system_name,
                 },
             )
-            assert "name" in content.lower()
+            # Body-specific fingerprint from test_02_write — `name` alone
+            # appears in ADT response boilerplate and would pass even on
+            # an error response.
+            assert "sysuuid_x16" in content.lower()
         except Exception:
             self.__class__._failed = True
             raise

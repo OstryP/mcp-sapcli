@@ -108,8 +108,8 @@ def format_startup_error(error: Exception) -> str:
             return (
                 f"Server startup failed: sapcli is not installed.\n"
                 f"{error}\n"
-                f"Action: install sapcli — see README for pinned commit. "
-                f"Example: uv pip install 'sapcli @ git+https://github.com/jfilak/sapcli@dcd3da2d'"
+                f"Action: install sapcli — see pyproject.toml for the pinned commit. "
+                f"Example: pip install -e . (or uv pip install -e .)."
             )
         return (
             f"Server startup failed: missing dependency.\n"

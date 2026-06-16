@@ -105,6 +105,18 @@ def _write_json(tmp_path, data: dict) -> str:
 
 
 class TestCookieSessionInitializer:
+    def test_satisfies_upstream_session_initializer_protocol(self):
+        """CookieSessionInitializer must satisfy sap.http.client.HTTPSessionInitializer.
+
+        The upstream Protocol is @runtime_checkable, so isinstance() catches
+        renames or signature changes on the next sapcli pin bump immediately
+        — before any live ADT call happens.
+        """
+        from sap.http.client import HTTPSessionInitializer
+
+        initializer = CookieSessionInitializer("SAP_SESSIONID_X=abc")
+        assert isinstance(initializer, HTTPSessionInitializer)
+
     def test_parses_multiple_cookies_into_jar(self):
         """A 'name1=v1; name2=v2' input string is split into separate jar entries."""
         initializer = CookieSessionInitializer(

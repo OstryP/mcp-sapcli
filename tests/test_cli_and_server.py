@@ -65,6 +65,27 @@ class TestCreateMcpServer:
         tools = asyncio.run(server.list_tools())
         assert len(tools) >= len(VERIFIED_COMMANDS)
 
+        # Spot-check critical tools by name + key schema fields. A pure
+        # count assertion would still pass if upstream sapcli renamed e.g.
+        # `program_write`'s `--no-check` to `--skip-check` (the tool would
+        # still register, just with a different schema). These targeted
+        # assertions catch rename-without-removal regressions on a sapcli
+        # bump before anyone hits them at runtime.
+        by_name = {t.name: t for t in tools}
+        for required in ("abap_program_write", "abap_class_write", "abap_program_read"):
+            assert required in by_name, f"Missing critical tool: {required}"
+
+        write_props = by_name["abap_program_write"].parameters.get("properties", {})
+        assert "source_data" in write_props, (
+            "abap_program_write must expose source_data (SourceDataPatch transforms "
+            "sapcli's source-as-array into inline source_data; loss of this property "
+            "means the patch silently stopped applying)"
+        )
+        assert "no_check" in write_props, (
+            "abap_program_write must expose no_check; renaming this upstream would "
+            "silently break callers"
+        )
+
     def test_creates_server_with_name(self):
         server = create_mcp_server(name="test-server")
         assert server.name == "test-server"
