@@ -193,6 +193,12 @@ jobs:
           # via is_keyring_available(), because we want to catch a regression
           # where the public API drifts from the underlying sentinel.
           uv run python -c "from sapclimcp.cli import main, keyring; assert keyring is None; print('cli: OK')"
+          # This server import chains fastmcp → py-key-value-aio, which declares
+          # keyring as an extra that is NOT installed here. It succeeds only
+          # because py-key-value-aio imports keyring lazily. If a future version
+          # eager-imports it, this step fails with ModuleNotFoundError from the
+          # transitive dep — that's a py-key-value-aio change, not a regression
+          # in sapclimcp.server's own soft-import.
           uv run python -c "from sapclimcp.server import create_mcp_server; print('server: OK')"
 
       - name: Credential subcommands fail gracefully (extras=none)
