@@ -718,6 +718,20 @@ class TestConnectionManager:
         mock_conn_cls.assert_not_called()
 
     @patch("sap.cli.gcts_connection_from_args")
+    def test_gcts_basic_auth_resolving_to_empty_raises(self, mock_factory, monkeypatch):
+        """R1#5: the gCTS path (_make_gcts_connection_args) routes through the
+        same _resolve_basic_credentials fail-fast helper as ADT. Without this
+        test, reverting just the gCTS call site to `or "unused"` would go
+        undetected (the ADT tests above wouldn't catch it)."""
+        monkeypatch.setenv("SAP_USER_BLANK", "")
+        mgr = self._make_manager(user="$SAP_USER_BLANK")
+
+        with pytest.raises(ConfigError, match=r"'user' resolved to an empty value"):
+            mgr.get_connection("DEV", "gcts")
+
+        mock_factory.assert_not_called()
+
+    @patch("sap.cli.gcts_connection_from_args")
     def test_get_gcts_connection(self, mock_factory):
         mock_conn = MagicMock()
         mock_factory.return_value = mock_conn

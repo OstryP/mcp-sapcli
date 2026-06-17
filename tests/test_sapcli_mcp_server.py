@@ -458,10 +458,6 @@ class TestSapcliCommandToolWithPatches:
         # must be gone after the command returns.
         assert not os.path.exists(captured_source_path[0])
 
-        # Tempfile should be cleaned up after run
-        assert len(captured_source_path) == 1
-        assert not os.path.exists(captured_source_path[0])
-
     @pytest.mark.asyncio
     @patch("sap.cli.adt_connection_from_args")
     async def test_cleanup_runs_on_command_error(self, mock_adt_connection_from_args):

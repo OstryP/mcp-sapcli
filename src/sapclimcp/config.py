@@ -414,12 +414,12 @@ class ConnectionManager:
         password = sys_config.password.resolve()
         if not user:
             raise ConfigError(
-                "Basic auth 'user' resolved to an empty value "
+                f"Basic auth 'user' resolved to an empty value for host {sys_config.ashost} "
                 "(check the referenced environment variable or keyring entry)."
             )
         if not password:
             raise ConfigError(
-                "Basic auth 'password' resolved to an empty value "
+                f"Basic auth 'password' resolved to an empty value for host {sys_config.ashost} "
                 "(check the referenced environment variable or keyring entry)."
             )
         return user, password
