@@ -5,17 +5,31 @@ import logging
 import os
 import sys
 
-import keyring
+try:
+    import keyring  # type: ignore[import-not-found]
+except ImportError:
+    # Soft-import: keyring is an optional dependency. The `credential` subcommands
+    # raise a clear, actionable error when invoked without it installed.
+    keyring = None  # type: ignore[assignment]
 
 from sapclimcp.config import KEYRING_SERVICE
-from sapclimcp.errors import format_startup_error
+from sapclimcp.errors import format_keyring_missing, format_startup_error
 from sapclimcp.server import create_mcp_server
 
 _VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
 
+def _require_keyring() -> None:
+    """Exit with a clear message if keyring is not installed."""
+    if keyring is None:
+        print(format_keyring_missing(), file=sys.stderr)
+        sys.exit(1)
+
+
 def _credential_set(args: argparse.Namespace) -> None:
     """Store a credential in the OS keyring."""
+    _require_keyring()
+    assert keyring is not None  # post-guard invariant for type-checker + readers
     value = args.value if args.value is not None else sys.stdin.readline().rstrip("\r\n")
     if not value:
         print("No value provided (pass as argument or pipe via stdin)", file=sys.stderr)
@@ -26,6 +40,8 @@ def _credential_set(args: argparse.Namespace) -> None:
 
 def _credential_get(args: argparse.Namespace) -> None:
     """Retrieve a credential from the OS keyring."""
+    _require_keyring()
+    assert keyring is not None  # post-guard invariant for type-checker + readers
     value = keyring.get_password(KEYRING_SERVICE, args.key)
     if value is None:
         print(f"No credential found for key: {args.key}", file=sys.stderr)
@@ -35,10 +51,19 @@ def _credential_get(args: argparse.Namespace) -> None:
 
 def _credential_delete(args: argparse.Namespace) -> None:
     """Delete a credential from the OS keyring."""
+    _require_keyring()
+    # Make the post-guard invariant machine-checkable: the deferred
+    # `from keyring.errors` below assumes `keyring is not None`.
+    assert keyring is not None
+    # Defer the keyring.errors lookup until after _require_keyring() has
+    # confirmed `keyring is not None` — keeps the no-keyring code path
+    # free of attribute access on the soft-imported module.
+    from keyring.errors import PasswordDeleteError
+
     try:
         keyring.delete_password(KEYRING_SERVICE, args.key)
         print(f"Deleted credential: {args.key}")
-    except keyring.errors.PasswordDeleteError:
+    except PasswordDeleteError:
         print(f"No credential found for key: {args.key}", file=sys.stderr)
         sys.exit(1)
 

@@ -9,6 +9,7 @@ import requests
 from sap.http.errors import UnauthorizedError
 
 from sapclimcp.config import (
+    _SECRET_FIELDS,
     KEYRING_SERVICE,
     ConfigError,
     ConnectionManager,
@@ -70,6 +71,40 @@ class TestSecretRef:
         ref = SecretRef("keyring:MISSING_KEY")
         with pytest.raises(ConfigError, match="MISSING_KEY"):
             ref.resolve()
+
+    @patch("sapclimcp.config.keyring", None)
+    def test_keyring_not_installed_raises_install_hint(self):
+        """When the `keyring` package is unavailable (optional extra not
+        installed), `keyring:` references must fail with a clear install
+        hint, not an AttributeError on `None.get_password`."""
+        ref = SecretRef("keyring:ANY_KEY")
+        with pytest.raises(ConfigError, match=r"pip install -e \.\[keyring\]"):
+            ref.resolve()
+
+    @patch("sapclimcp.config.keyring", None)
+    def test_env_var_still_works_without_keyring(self, monkeypatch):
+        """Without keyring installed, $ENV credentials must still resolve."""
+        monkeypatch.setenv("FALLBACK_SECRET", "ok")
+        assert SecretRef("$FALLBACK_SECRET").resolve() == "ok"
+
+    @patch("sapclimcp.config.keyring", None)
+    def test_literal_still_works_without_keyring(self):
+        """Without keyring installed, literal credentials must still resolve."""
+        assert SecretRef("plain_password").resolve() == "plain_password"
+
+    # ── is_keyring_ref property ────────────────────────────────────
+
+    def test_is_keyring_ref_for_keyring_prefix(self):
+        assert SecretRef("keyring:DEV").is_keyring_ref is True
+
+    def test_is_keyring_ref_for_env_var(self):
+        assert SecretRef("$MY_VAR").is_keyring_ref is False
+
+    def test_is_keyring_ref_for_literal(self):
+        assert SecretRef("plain_password").is_keyring_ref is False
+
+    def test_is_keyring_ref_for_empty(self):
+        assert SecretRef("").is_keyring_ref is False
 
     def test_repr_hides_literals(self):
         assert "***" in repr(SecretRef("password123"))
@@ -370,6 +405,110 @@ class TestServerConfig:
             }
         )
         assert cfg.default_system is None
+
+    # ── keyring_refs() ──────────────────────────────────────────────
+
+    def test_keyring_refs_returns_empty_when_no_refs(self):
+        cfg = ServerConfig(
+            systems={
+                "DEV": SystemConfig(
+                    ashost="h",
+                    client="c",
+                    user=SecretRef("u"),
+                    password=SecretRef("p"),
+                )
+            }
+        )
+        assert cfg.keyring_refs() == []
+
+    def test_keyring_refs_returns_matching_fields(self):
+        cfg = ServerConfig(
+            systems={
+                "DEV": SystemConfig(
+                    ashost="h",
+                    client="c",
+                    auth="cookie",
+                    cookie=SecretRef("keyring:DEV-cookie"),
+                ),
+            }
+        )
+        assert cfg.keyring_refs() == ["DEV.cookie"]
+
+    def test_keyring_refs_excludes_non_keyring(self):
+        """Mixed config: only keyring-prefixed fields appear; literal and
+        $ENV_VAR refs are excluded."""
+        cfg = ServerConfig(
+            systems={
+                "MIXED": SystemConfig(
+                    ashost="h",
+                    client="c",
+                    user=SecretRef("$SAP_USER"),  # env var — NOT keyring
+                    password=SecretRef("literal-pass"),  # literal — NOT keyring
+                    auth="cookie",
+                    cookie=SecretRef("keyring:MIXED-cookie"),  # keyring — INCLUDED
+                ),
+            }
+        )
+        assert cfg.keyring_refs() == ["MIXED.cookie"]
+
+    def test_keyring_refs_iteration_order_is_stable(self):
+        """`_SECRET_FIELDS` is a tuple, so the iteration order is fixed at
+        ('user', 'password', 'cookie') across processes — protect this
+        contract since a future test could otherwise become flaky."""
+        # R4-1: pin the type contract so a frozenset regression fails fast
+        # rather than appearing as a flaky list-comparison failure.
+        assert isinstance(_SECRET_FIELDS, tuple), (
+            f"_SECRET_FIELDS must be a tuple for stable iteration order; "
+            f"got {type(_SECRET_FIELDS).__name__}"
+        )
+        cfg = ServerConfig(
+            systems={
+                "DEV": SystemConfig(
+                    ashost="h",
+                    client="c",
+                    user=SecretRef("keyring:DEV-user"),
+                    password=SecretRef("keyring:DEV-pass"),
+                    auth="cookie",
+                    cookie=SecretRef("keyring:DEV-cookie"),
+                ),
+            }
+        )
+        # Field order matches _SECRET_FIELDS
+        assert cfg.keyring_refs() == ["DEV.user", "DEV.password", "DEV.cookie"]
+
+    def test_keyring_refs_multi_system_outer_iteration_order(self):
+        """R4-3: multi-system case isolates the outer-loop ordering contract.
+        `dict.items()` preserves insertion order in Python 3.7+; combined
+        with the stable `_SECRET_FIELDS` tuple inner order, callers can
+        rely on a fully deterministic flattened order."""
+        cfg = ServerConfig(
+            systems={
+                "ALPHA": SystemConfig(
+                    ashost="a",
+                    client="1",
+                    auth="cookie",
+                    cookie=SecretRef("keyring:ALPHA-cookie"),
+                ),
+                "BETA": SystemConfig(
+                    ashost="b",
+                    client="2",
+                    user=SecretRef("keyring:BETA-user"),
+                    password=SecretRef("keyring:BETA-pass"),
+                ),
+                "GAMMA": SystemConfig(
+                    ashost="g",
+                    client="3",
+                    user=SecretRef("$ENV"),  # excluded — env var, not keyring
+                    password=SecretRef("literal"),  # excluded — literal
+                ),
+            }
+        )
+        # Flattened order: outer = systems insertion order, inner = _SECRET_FIELDS order
+        assert cfg.keyring_refs() == [
+            "ALPHA.cookie",
+            "BETA.user",
+            "BETA.password",
+        ]
 
 
 # ---------------------------------------------------------------------------

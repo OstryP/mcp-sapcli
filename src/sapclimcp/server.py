@@ -4,7 +4,19 @@ This module contains the server creation logic, importable from the
 package without module-level side effects.
 """
 
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING
+
 from fastmcp import FastMCP
+
+from sapclimcp.errors import KEYRING_INSTALL_HINT
+
+if TYPE_CHECKING:
+    from sapclimcp.config import ServerConfig
+
+_LOGGER = logging.getLogger(__name__)
 
 # List of verified and supported sapcli commands exposed as MCP tools
 VERIFIED_COMMANDS = [
@@ -78,6 +90,7 @@ def create_mcp_server(
         from sapclimcp.config import ConnectionManager, load_config
 
         server_config = load_config(config_path)
+        _warn_if_keyring_refs_without_keyring(server_config)
         connection_manager = ConnectionManager(server_config)
         instructions = MCP_SERVER_INSTRUCTIONS_MANAGED.format(
             systems=", ".join(connection_manager.system_names),
@@ -95,3 +108,36 @@ def create_mcp_server(
 
     transform_sapcli_commands(mcp, allowed_commands, connection_manager=connection_manager)
     return mcp
+
+
+def _warn_if_keyring_refs_without_keyring(server_config: ServerConfig) -> None:
+    """Log a warning if any system references a `keyring:` credential
+    while the `keyring` package is not installed.
+
+    Catches the misconfiguration at startup rather than at first ADT
+    request, so users see the problem before connection attempts fail.
+
+    The WARNING is intentionally summary-only (count + install hint) so
+    that in stdio mode, where Python's lastResort handler can route the
+    message to stderr and onward to the MCP client, we don't enumerate
+    the user's credential layout (system_name × field) over the wire.
+    Per-field detail is demoted to DEBUG, which only surfaces when the
+    operator explicitly opts in with --log-level=DEBUG.
+    """
+    from sapclimcp.config import is_keyring_available
+
+    if is_keyring_available():
+        return
+
+    refs = server_config.keyring_refs()
+    if not refs:
+        return
+
+    _LOGGER.warning(
+        "Config references %d keyring credential(s) but the 'keyring' package "
+        "is not installed; these will fail at first connection. "
+        "Install with: %s",
+        len(refs),
+        KEYRING_INSTALL_HINT,
+    )
+    _LOGGER.debug("keyring-referencing fields: %s", ", ".join(refs))

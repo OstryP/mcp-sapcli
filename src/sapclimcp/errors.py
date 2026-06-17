@@ -12,6 +12,31 @@ class ConfigError(Exception):
     """Raised for configuration loading or validation errors."""
 
 
+# Install hint shared between the keyring-missing error and the
+# cookie-refresh action hint. The package is git-installed (not on PyPI),
+# so the editable form is the correct invocation.
+KEYRING_INSTALL_HINT = "pip install -e .[keyring]"
+
+
+def format_keyring_missing(context: str | None = None) -> str:
+    """Format the canonical "keyring extra not installed" message.
+
+    Centralizes the install hint so the wording stays consistent across
+    the credential CLI (`cli.py`) and the SecretRef resolver (`config.py`)
+    instead of drifting in two places.
+
+    Args:
+        context: Optional caller-specific prefix (e.g. "Cannot resolve
+            'keyring:DEV'"). When omitted, the message stands alone.
+    """
+    base = (
+        f"The 'keyring' package is not installed. "
+        f"Install with: {KEYRING_INSTALL_HINT}, "
+        f"or use $ENV_VAR / literal credentials instead."
+    )
+    return f"{context}: {base}" if context else base
+
+
 def format_auth_error(
     auth_type: str,
     system_name: str,
@@ -32,11 +57,17 @@ def format_auth_error(
 
     if auth_type == "cookie":
         cause = "The SSO cookie has likely expired."
+        # Cover both credential resolution modes — telling a $ENV_VAR user
+        # to run `sapcli-mcp credential set` would itself fail if keyring
+        # is not installed.
         action = (
-            "Refresh the SSO cookie. "
-            "If using keyring: run `sapcli-mcp credential set <key> <fresh-cookie>`. "
-            "If using $ENV_VAR, ensure the variable contains a fresh cookie value "
-            "and restart the server."
+            "Refresh the SSO cookie in whichever store the config references. "
+            "For `keyring:<key>`: run `sapcli-mcp credential set <key> <fresh-cookie>` "
+            f"(requires the [keyring] extra: {KEYRING_INSTALL_HINT}). "
+            "For `$ENV_VAR`: update the variable and restart the server. "
+            "For a literal cookie in config: edit the config file and restart "
+            "(consider migrating to keyring: or $ENV_VAR to avoid storing a "
+            "bearer-equivalent cookie in plaintext at rest)."
         )
     else:
         cause = "Invalid username or password, or the account is locked."

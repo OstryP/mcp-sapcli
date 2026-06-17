@@ -25,6 +25,21 @@ uv pip install -e .
 
 This installs the `sapcli-mcp` command and all dependencies (including sapcli from git).
 
+### Optional: OS keyring support
+
+To store credentials in the OS keyring (Windows Credential Manager, macOS
+Keychain, Linux Secret Service), install the optional `[keyring]` extra:
+
+```bash
+pip install -e .[keyring]
+# or:
+uv pip install -e .[keyring]
+```
+
+Without this extra, only `$ENV_VAR` and literal credential modes work; the
+`keyring:` prefix and the `sapcli-mcp credential` CLI subcommands raise a
+clear install hint.
+
 ## Usage
 
 ### With server-side connection management (recommended)
@@ -53,11 +68,12 @@ all resolved lazily at connection time (not at startup):
 
 | Syntax | Resolves via | Example |
 |--------|-------------|---------|
-| `keyring:<key>` | OS keyring (Windows Credential Manager, macOS Keychain, Linux Secret Service) | `"keyring:DEV"` |
+| `keyring:<key>` | OS keyring (Windows Credential Manager, macOS Keychain, Linux Secret Service) — requires the `[keyring]` install extra | `"keyring:DEV"` |
 | `$ENV_VAR` | Environment variable | `"$SAP_COOKIE_DEV"` |
 | literal | Used as-is | `"Welcome1!"` |
 
-Manage keyring credentials with the built-in CLI:
+Manage keyring credentials with the built-in CLI (requires the
+`[keyring]` extra — see [Optional: OS keyring support](#optional-os-keyring-support)):
 
 ```bash
 sapcli-mcp credential set DEV "SAP_SESSIONID=abc123; sap-usercontext=sap-client=001"
@@ -104,6 +120,15 @@ sapcli-mcp --host 0.0.0.0 --port 9000
 | `--host`         | `127.0.0.1` | Host address to bind to (HTTP mode only)           |
 | `--port`         | `8000`      | Port to listen on (HTTP mode only)                 |
 | `--log-level`    | (none)      | Logging level to stderr (env: `SAPCLI_MCP_LOG_LEVEL`) |
+
+> **Note on keyring scanner output.** When the server starts with a config
+> that references `keyring:<key>` credentials but the `[keyring]` extra is
+> not installed, a count-only WARNING fires (`Config references N keyring
+> credential(s)…`). The list of affected `<system>.<field>` paths is logged
+> at DEBUG level — pass `--log-level=DEBUG` (or `SAPCLI_MCP_LOG_LEVEL=DEBUG`)
+> to see the full detail. The split is intentional: the WARNING surfaces
+> reliably (Python's `lastResort` handler) while the per-field detail stays
+> opt-in to avoid leaking the credential layout to MCP clients in stdio mode.
 
 ### Legacy invocation
 
