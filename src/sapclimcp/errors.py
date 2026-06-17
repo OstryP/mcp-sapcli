@@ -12,6 +12,19 @@ class ConfigError(Exception):
     """Raised for configuration loading or validation errors."""
 
 
+class ToolInputError(Exception):
+    """Raised by a tool patch when LLM-supplied input fails validation.
+
+    Distinct on purpose from both `sap.errors.SAPCliError` (a backend/library
+    failure) and a bare `ValueError` (which signals an unexpected bug).
+    `_run_sapcli_command` converts this into a user-facing
+    `OperationResult(Success=False)`, whereas a plain `ValueError` bubbles up to
+    `SapcliCommandTool.run()`'s logger and is reported as "likely a bug". Using
+    a dedicated type keeps that classification deliberate instead of catching
+    every `ValueError` raised anywhere under the command call.
+    """
+
+
 # Install hint shared between the keyring-missing error and the
 # cookie-refresh action hint. The package is git-installed (not on PyPI),
 # so the editable form is the correct invocation.

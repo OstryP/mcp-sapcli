@@ -12,6 +12,7 @@ from sap.http.errors import UnauthorizedError
 
 from sapclimcp import mcptools
 from sapclimcp.argparsertool import ArgParserTool
+from sapclimcp.errors import ToolInputError
 from sapclimcp.toolpatches import SourceDataPatch
 
 
@@ -168,19 +169,39 @@ class TestRunSapcliCommand:
         assert result.Contents == "test capture stdout\n"
         assert result.LogMessages == ["Command failed", "test capture stderr\n"]
 
-    def test_value_error_returns_user_error(self):
-        """B1 fix: ValueError from a tool patch (e.g. SourceDataPatch's
-        empty-source_data check) must be reported as a user error, not as
-        a "likely a bug" wrapper."""
+    def test_tool_input_error_returns_user_error(self):
+        """B1 + R1#3: a ToolInputError raised by a tool patch (e.g.
+        SourceDataPatch's empty-source_data check) is reported as a user error
+        (Success=False with the message) by _run_sapcli_command.
+
+        Note: _run_sapcli_command itself does not produce the "likely a bug"
+        wrapper — that belongs to SapcliCommandTool.run()'s broad handler. This
+        test pins that ToolInputError takes the user-error branch here.
+        """
         mock_conn = MagicMock()
 
         def mock_command(conn, args):
-            raise ValueError("source_data must not be empty")
+            raise ToolInputError("source_data must not be empty")
 
         result = mcptools._run_sapcli_command(mock_command, mock_conn, SimpleNamespace())
 
         assert result.Success is False
         assert "source_data must not be empty" in result.LogMessages[0]
+
+    def test_unexpected_value_error_propagates(self):
+        """R1#3: a bare ValueError is deliberately NOT caught by
+        _run_sapcli_command — it signals an unexpected bug and must bubble up to
+        SapcliCommandTool.run()'s broad handler (which logs it and reports
+        "likely a bug"). Catching every ValueError here would misclassify
+        internal failures as user-input errors.
+        """
+        mock_conn = MagicMock()
+
+        def mock_command(conn, args):
+            raise ValueError("int() conversion blew up somewhere internal")
+
+        with pytest.raises(ValueError, match="blew up somewhere internal"):
+            mcptools._run_sapcli_command(mock_command, mock_conn, SimpleNamespace())
 
 
 class TestSapcliCommandTool:
@@ -205,10 +226,13 @@ class TestSapcliCommandTool:
         mock_conn = MagicMock()
         mock_adt_connection_from_args.return_value = mock_conn
 
+        ran = []
+
         def tester_tool_fn(conn, args):
             # Check that the attribute exists with its default value
             assert hasattr(args, "logical")
             assert args.logical is False
+            ran.append(True)
 
         apt = ArgParserTool(
             "tester", None, conn_factory=mock_adt_connection_from_args, conn_type="adt"
@@ -234,10 +258,11 @@ class TestSapcliCommandTool:
             }
         )
 
-        # B5 fix: assert that the callback actually ran successfully —
-        # without this, a refactor that bypasses execution would let
-        # `tester_tool_fn`'s asserts go uncovered and the test would
-        # silently pass.
+        # B5 fix (R1#1): assert the callback actually ran via a side-effect
+        # flag. `Success=True` alone is the no-op default return, so asserting
+        # only on it would pass vacuously if a refactor skipped execution and
+        # left `tester_tool_fn`'s asserts uncovered.
+        assert ran == [True], "callback was never invoked"
         assert result.structured_content["result"][0] is True
 
     @pytest.mark.asyncio
@@ -253,10 +278,13 @@ class TestSapcliCommandTool:
         mock_conn = MagicMock()
         mock_adt_connection_from_args.return_value = mock_conn
 
+        ran = []
+
         def tester_tool_fn(conn, args):
             # Check that the attribute exists with its default value
             assert hasattr(args, "dnul")
             assert args.dnul is None
+            ran.append(True)
 
         apt = ArgParserTool(
             "tester", None, conn_factory=mock_adt_connection_from_args, conn_type="adt"
@@ -282,7 +310,9 @@ class TestSapcliCommandTool:
             }
         )
 
-        # B5 fix: see test_default_values above.
+        # B5 fix (R1#1): see test_default_values above — assert the callback
+        # actually ran, not just the no-op Success=True default.
+        assert ran == [True], "callback was never invoked"
         assert result.structured_content["result"][0] is True
 
     @pytest.mark.asyncio
@@ -331,10 +361,13 @@ class TestSapcliCommandTool:
         mock_conn = MagicMock()
         mock_adt_connection_from_args.return_value = mock_conn
 
+        ran = []
+
         def tester_tool_fn(conn, args):
             # Check that the attribute exists with underscore name
             assert hasattr(args, "name_with_dash")
             assert args.name_with_dash == "test_value"
+            ran.append(True)
 
         apt = ArgParserTool(
             "tester", None, conn_factory=mock_adt_connection_from_args, conn_type="adt"
@@ -346,7 +379,7 @@ class TestSapcliCommandTool:
         tool = apt.tools["tester_tool"]
         sct = mcptools.SapcliCommandTool.from_argparser_tool(tool)
 
-        await sct.run(
+        result = await sct.run(
             {
                 "ashost": "localhost",
                 "client": "100",
@@ -358,6 +391,11 @@ class TestSapcliCommandTool:
                 "name_with_dash": "test_value",
             }
         )
+
+        # R1#2: same B5 anti-pattern — prove the callback ran rather than
+        # relying on the no-op Success=True default.
+        assert ran == [True], "callback was never invoked"
+        assert result.structured_content["result"][0] is True
 
 
 class TestSapcliCommandToolWithPatches:
@@ -400,7 +438,7 @@ class TestSapcliCommandToolWithPatches:
         assert "source_data" in sct.parameters["properties"]
         assert "source" not in sct.parameters["properties"]
 
-        await sct.run(
+        result = await sct.run(
             {
                 "ashost": "localhost",
                 "client": "100",
@@ -411,6 +449,14 @@ class TestSapcliCommandToolWithPatches:
                 "source_data": source_content,
             }
         )
+
+        # R1#6: the callback ran (it appended the tempfile path) and the run
+        # succeeded — assert both rather than discarding the result.
+        assert len(captured_source_path) == 1, "write callback was never invoked"
+        assert result.structured_content["result"][0] is True
+        # Cleanup is part of this test's contract ("-> cleanup"): the tempfile
+        # must be gone after the command returns.
+        assert not os.path.exists(captured_source_path[0])
 
         # Tempfile should be cleaned up after run
         assert len(captured_source_path) == 1

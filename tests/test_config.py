@@ -678,6 +678,45 @@ class TestConnectionManager:
         kwargs = mock_conn_cls.call_args.kwargs
         assert kwargs["session_initializer"] is None
 
+    @patch("sap.adt.Connection")
+    def test_cookie_auth_passes_unused_credential_placeholders(self, mock_conn_cls):
+        """R1#5: cookie auth passes explicit 'unused' user/password to
+        sap.adt.Connection. They are inert (the session initializer clears
+        session.auth) but the ctor still requires non-None strings."""
+        mock_conn_cls.return_value = MagicMock()
+
+        mgr = self._make_manager(auth="cookie", cookie="SAP_SESSION=abc")
+        mgr.get_connection("DEV", "adt")
+
+        kwargs = mock_conn_cls.call_args.kwargs
+        assert kwargs["user"] == "unused"
+        assert kwargs["password"] == "unused"
+
+    @patch("sap.adt.Connection")
+    def test_basic_auth_user_resolving_to_empty_raises(self, mock_conn_cls, monkeypatch):
+        """R1#5: a $ENV_VAR user that is set but blank passes config-load
+        validation (raw is non-empty) yet resolves to '' at connection time.
+        Fail fast with a clear ConfigError instead of silently substituting
+        'unused' and getting an opaque 401 from SAP."""
+        monkeypatch.setenv("SAP_USER_BLANK", "")
+        mgr = self._make_manager(user="$SAP_USER_BLANK")
+
+        with pytest.raises(ConfigError, match=r"'user' resolved to an empty value"):
+            mgr.get_connection("DEV", "adt")
+
+        mock_conn_cls.assert_not_called()
+
+    @patch("sap.adt.Connection")
+    def test_basic_auth_password_resolving_to_empty_raises(self, mock_conn_cls, monkeypatch):
+        """R1#5: same as the user case, for a $ENV_VAR password resolving to ''."""
+        monkeypatch.setenv("SAP_PASS_BLANK", "")
+        mgr = self._make_manager(password="$SAP_PASS_BLANK")
+
+        with pytest.raises(ConfigError, match=r"'password' resolved to an empty value"):
+            mgr.get_connection("DEV", "adt")
+
+        mock_conn_cls.assert_not_called()
+
     @patch("sap.cli.gcts_connection_from_args")
     def test_get_gcts_connection(self, mock_factory):
         mock_conn = MagicMock()
@@ -898,7 +937,7 @@ class TestSystemConfigValidation:
             SystemConfig(ashost="h", client="c", auth="cookie", cookie=SecretRef(""))
 
     def test_basic_auth_without_user_raises(self):
-        with pytest.raises(ConfigError, match="non-empty"):
+        with pytest.raises(ConfigError, match=r"non-empty 'user'"):
             SystemConfig(ashost="h", client="c", auth="basic", user=SecretRef(""))
 
     def test_basic_auth_without_password_raises(self):

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from sapclimcp.argparsertool import ArgParserTool
+from sapclimcp.errors import ToolInputError
 from sapclimcp.toolpatches import (
     ConnectionPatch,
     MissingGroupParamPatch,
@@ -175,13 +176,13 @@ class TestSourceDataPatchApply:
         original_fn.assert_called_once_with(conn, args)
 
     def test_empty_source_data_raises(self):
-        """Empty source_data string raises ValueError."""
+        """Empty source_data string raises ToolInputError (user-input error)."""
         tool = self._make_tool_with_source()
 
         patch = SourceDataPatch()
         patch.apply(tool)
 
-        with pytest.raises(ValueError, match="source_data must not be empty"):
+        with pytest.raises(ToolInputError, match="source_data must not be empty"):
             tool.cmdfn(MagicMock(), SimpleNamespace(source_data=""))
 
     def test_unicode_content(self):
@@ -430,7 +431,7 @@ class TestSourceFileToInlinePatchApply:
         assert not os.path.exists(captured["source"])  # cleaned up
 
     def test_empty_source_data_raises(self):
-        """Empty source_data string raises ValueError."""
+        """Empty source_data string raises ToolInputError (user-input error)."""
         tool = ArgParserTool("test", None)
         tool.add_argument("source", type=str)
         tool.set_defaults(execute=lambda c, a: None)
@@ -438,7 +439,7 @@ class TestSourceFileToInlinePatchApply:
         patch = SourceFileToInlinePatch()
         patch.apply(tool)
 
-        with pytest.raises(ValueError, match="source_data must not be empty"):
+        with pytest.raises(ToolInputError, match="source_data must not be empty"):
             tool.cmdfn(MagicMock(), SimpleNamespace(source_data=""))
 
     def test_cleanup_on_command_error(self):

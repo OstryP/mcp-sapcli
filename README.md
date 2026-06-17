@@ -85,6 +85,24 @@ Auth types:
 - `"basic"` (default) — uses `user` and `password` fields
 - `"cookie"` — uses `cookie` field (for SSO environments)
 
+A basic-auth system (both `user` and `password` are required and validated at
+config load):
+
+```json
+{
+  "systems": {
+    "PRD": {
+      "ashost": "prd.sap.example.com",
+      "client": "100",
+      "auth": "basic",
+      "user": "$SAP_USER_PRD",
+      "password": "keyring:PRD"
+    }
+  },
+  "default_system": "PRD"
+}
+```
+
 Start the server in **stdio** mode (for Claude Code / MCP clients):
 
 ```bash

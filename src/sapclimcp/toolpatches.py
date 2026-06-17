@@ -13,6 +13,8 @@ from collections.abc import Sequence
 from types import SimpleNamespace
 from typing import Any, Optional
 
+from sapclimcp.errors import ToolInputError
+
 
 class ToolPatch(ABC):
     """Abstract base class for tool patches.
@@ -86,7 +88,7 @@ class SourceDataPatch(ToolPatch):
                 return
 
             if not source_data:
-                raise ValueError("source_data must not be empty")
+                raise ToolInputError("source_data must not be empty")
 
             fd, tmppath = tempfile.mkstemp(suffix=".abap")
             try:

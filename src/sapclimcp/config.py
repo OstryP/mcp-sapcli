@@ -401,32 +401,66 @@ class ConnectionManager:
             "verify": sys_config.verify,
         }
 
-    def _make_gcts_connection_args(self, sys_config: SystemConfig) -> SimpleNamespace:
-        """Build a SimpleNamespace matching what sapcli gCTS connection factory expects."""
+    def _resolve_basic_credentials(self, sys_config: SystemConfig) -> tuple[str, str]:
+        """Resolve user + password for basic auth, failing fast if either is empty.
 
+        `SystemConfig.__post_init__` guarantees non-empty *raw* values for basic
+        auth, but a `$ENV_VAR` reference can still resolve to an empty string at
+        connection time (variable set but blank). Surface that as a clear
+        ConfigError instead of silently substituting a placeholder and getting an
+        opaque 401 from SAP.
+        """
+        user = sys_config.user.resolve()
+        password = sys_config.password.resolve()
+        if not user:
+            raise ConfigError(
+                "Basic auth 'user' resolved to an empty value "
+                "(check the referenced environment variable or keyring entry)."
+            )
+        if not password:
+            raise ConfigError(
+                "Basic auth 'password' resolved to an empty value "
+                "(check the referenced environment variable or keyring entry)."
+            )
+        return user, password
+
+    def _make_gcts_connection_args(self, sys_config: SystemConfig) -> SimpleNamespace:
+        """Build a SimpleNamespace matching what sapcli gCTS connection factory expects.
+
+        gCTS is basic-auth only (`_create_gcts_connection` rejects cookie auth),
+        so user/password are always required here.
+        """
+
+        user, password = self._resolve_basic_credentials(sys_config)
         return SimpleNamespace(
             ashost=sys_config.ashost,
             client=sys_config.client,
             port=sys_config.port,
             ssl=sys_config.ssl,
             verify=sys_config.verify,
-            user=sys_config.user.resolve() or "unused",
-            password=sys_config.password.resolve() or "unused",
+            user=user,
+            password=password,
             ssl_server_cert=None,
         )
 
     def _create_adt_connection(self, sys_config: SystemConfig) -> sap.adt.Connection:
         """Create an ADT connection, using session_initializer for cookie auth."""
 
-        initializer = None
         if sys_config.auth == "cookie":
             initializer = CookieSessionInitializer(sys_config.cookie.resolve())
+            # Cookie auth authenticates via the session initializer, which clears
+            # session.auth. sap.adt.Connection still requires non-None user/
+            # password strings, so pass explicit placeholders — they are inert.
+            user, password = "unused", "unused"
+        else:
+            initializer = None
+            user, password = self._resolve_basic_credentials(sys_config)
 
         return sap.adt.Connection(
             host=sys_config.ashost,
             client=sys_config.client,
-            user=sys_config.user.resolve() or "unused",
-            password=sys_config.password.resolve() or "unused",
+            user=user,
+            password=password,
             port=sys_config.port,
             ssl=sys_config.ssl,
             verify=sys_config.verify,

@@ -31,7 +31,12 @@ from typing_extensions import TypeVar
 
 from sapclimcp import argparsertool
 from sapclimcp.argparsertool import ArgParserTool
-from sapclimcp.errors import ConfigError, format_auth_error, format_connection_error
+from sapclimcp.errors import (
+    ConfigError,
+    ToolInputError,
+    format_auth_error,
+    format_connection_error,
+)
 from sapclimcp.toolpatches import (
     ConnectionPatch,
     MissingGroupParamPatch,
@@ -181,18 +186,15 @@ def _run_sapcli_command(
         command(conn, args)
     except UnauthorizedError:
         raise
-    except errors.SAPCliError as ex:
-        return OperationResult(
-            Success=False,
-            LogMessages=[str(ex), output_buffer.caperr],
-            Contents=output_buffer.capout,
-        )
-    except ValueError as ex:
-        # ValueError originates from input-validation in our tool patches
-        # (e.g. SourceDataPatch's "source_data must not be empty"). Treat
-        # it as a user-input error rather than letting it fall through to
-        # the broad except in SapcliCommandTool.run() which would wrap it
-        # as "likely a bug — check server logs".
+    except (errors.SAPCliError, ToolInputError) as ex:
+        # Two expected, user-facing failure classes reported back as a failed
+        # OperationResult (not a server bug):
+        #   - sap.errors.SAPCliError: the backend/library rejected the request.
+        #   - ToolInputError: our own tool patches rejected the LLM's input
+        #     (e.g. SourceDataPatch's "source_data must not be empty").
+        # A bare ValueError is deliberately NOT caught here — it signals an
+        # unexpected bug and is left to bubble up to SapcliCommandTool.run()'s
+        # broad handler, which logs it and reports "likely a bug".
         return OperationResult(
             Success=False,
             LogMessages=[str(ex), output_buffer.caperr],
