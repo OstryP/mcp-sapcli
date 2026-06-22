@@ -203,6 +203,22 @@ class TestRunSapcliCommand:
         with pytest.raises(ValueError, match="blew up somewhere internal"):
             mcptools._run_sapcli_command(mock_command, mock_conn, SimpleNamespace())
 
+    def test_unicode_error_is_not_swallowed(self):
+        """Review F1: UnicodeEncodeError is a ValueError subclass. There is a
+        documented live bug where abap_datapreview_osql raises UnicodeEncodeError
+        on LIKE/% queries; a bare `except ValueError` here would have masked it as
+        a benign user-input error with no server-side stack trace. The fix catches
+        only (SAPCliError, ToolInputError), so a UnicodeError propagates to
+        SapcliCommandTool.run()'s logger instead of being silently downgraded.
+        """
+        mock_conn = MagicMock()
+
+        def mock_command(conn, args):
+            "ł".encode("ascii")  # raises UnicodeEncodeError (a ValueError)
+
+        with pytest.raises(UnicodeEncodeError):
+            mcptools._run_sapcli_command(mock_command, mock_conn, SimpleNamespace())
+
 
 class TestSapcliCommandTool:
     """Tests for the class SapcliCommandTool"""

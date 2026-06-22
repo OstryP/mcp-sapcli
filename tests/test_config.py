@@ -717,6 +717,19 @@ class TestConnectionManager:
 
         mock_conn_cls.assert_not_called()
 
+    @patch("sap.adt.Connection")
+    @patch("keyring.get_password", return_value="")
+    def test_basic_auth_keyring_resolving_to_empty_raises(self, mock_kr, mock_conn_cls):
+        """Review F2: a keyring entry that resolves to an empty string (not None)
+        fails fast too — the same fail-fast path as a blank $ENV_VAR, regardless
+        of the resolution source."""
+        mgr = self._make_manager(password="keyring:PRD")
+
+        with pytest.raises(ConfigError, match=r"'password' resolved to an empty value"):
+            mgr.get_connection("DEV", "adt")
+
+        mock_conn_cls.assert_not_called()
+
     @patch("sap.cli.gcts_connection_from_args")
     def test_gcts_basic_auth_resolving_to_empty_raises(self, mock_factory, monkeypatch):
         """R1#5: the gCTS path (_make_gcts_connection_args) routes through the

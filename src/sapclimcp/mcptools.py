@@ -194,7 +194,10 @@ def _run_sapcli_command(
         #     (e.g. SourceDataPatch's "source_data must not be empty").
         # A bare ValueError is deliberately NOT caught here — it signals an
         # unexpected bug and is left to bubble up to SapcliCommandTool.run()'s
-        # broad handler, which logs it and reports "likely a bug".
+        # broad handler, which logs it and reports "likely a bug". This matters
+        # concretely: UnicodeEncodeError (the live abap_datapreview_osql OSQL
+        # bug) is a ValueError subclass, and catching it here would mask a real
+        # bug as benign user input with no server-side stack trace.
         return OperationResult(
             Success=False,
             LogMessages=[str(ex), output_buffer.caperr],

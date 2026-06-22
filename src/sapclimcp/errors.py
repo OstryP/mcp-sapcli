@@ -22,6 +22,13 @@ class ToolInputError(Exception):
     `SapcliCommandTool.run()`'s logger and is reported as "likely a bug". Using
     a dedicated type keeps that classification deliberate instead of catching
     every `ValueError` raised anywhere under the command call.
+
+    Intentionally based on `Exception`, NOT `ValueError`. The whole motivation
+    is that `ValueError` is too broad a net: `UnicodeEncodeError` (the live
+    `abap_datapreview_osql` OSQL bug) is a `ValueError` subclass, so a
+    `ValueError`-based sentinel could still be caught by a stray
+    `except ValueError` and mask a genuine bug. Keeping this type outside the
+    `ValueError` hierarchy guarantees it can only be caught by name.
     """
 
 
