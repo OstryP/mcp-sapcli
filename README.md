@@ -85,8 +85,9 @@ Auth types:
 - `"basic"` (default) — uses `user` and `password` fields
 - `"cookie"` — uses `cookie` field (for SSO environments)
 
-A basic-auth system (both `user` and `password` are required and validated at
-config load):
+A basic-auth system — both `user` and `password` reference fields are required at
+config load; their *resolved* values are validated at first connection (a
+`$ENV_VAR` or `keyring:` ref that resolves to empty fails there, not at load):
 
 ```json
 {

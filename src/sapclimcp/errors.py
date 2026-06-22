@@ -1,7 +1,9 @@
 """
-Actionable error message formatting for mcp-sapcli.
+Error types and actionable error-message formatting for mcp-sapcli.
 
-Each formatter produces a message with:
+This module owns the package's own exception hierarchy (`ConfigError`,
+`ToolInputError`) alongside the message formatters. Each formatter produces a
+message with:
 - What happened (brief description)
 - Why (likely cause)
 - What to do (concrete action)

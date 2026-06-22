@@ -392,6 +392,14 @@ class ConnectionManager:
         """
 
         sys_config = self._resolve_system(system_name)
+        # This path only *injects* connection params into the command args
+        # namespace; it does not authenticate. The authenticated connection is
+        # built by get_connection() earlier in the same SapcliCommandTool.run()
+        # call, which fails fast via _resolve_basic_credentials() if a basic-auth
+        # credential resolves to empty. So `user` here is already validated for
+        # basic auth, and this path stays deliberately tolerant (`or ""`, also
+        # the inert value for cookie auth). Keep it tolerant if the call order
+        # ever changes — the fail-fast belongs in connection creation, not here.
         return {
             "ashost": sys_config.ashost,
             "port": sys_config.port,

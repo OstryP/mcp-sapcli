@@ -745,6 +745,19 @@ class TestConnectionManager:
         mock_factory.assert_not_called()
 
     @patch("sap.cli.gcts_connection_from_args")
+    def test_gcts_basic_auth_password_resolving_to_empty_raises(self, mock_factory, monkeypatch):
+        """Review R2 N4: gCTS password-empty symmetry with the ADT path and the
+        gCTS user case above — a blank-resolving $ENV_VAR password fails fast via
+        _resolve_basic_credentials before gcts_connection_from_args is called."""
+        monkeypatch.setenv("SAP_PASS_BLANK", "")
+        mgr = self._make_manager(password="$SAP_PASS_BLANK")
+
+        with pytest.raises(ConfigError, match=r"'password' resolved to an empty value"):
+            mgr.get_connection("DEV", "gcts")
+
+        mock_factory.assert_not_called()
+
+    @patch("sap.cli.gcts_connection_from_args")
     def test_get_gcts_connection(self, mock_factory):
         mock_conn = MagicMock()
         mock_factory.return_value = mock_conn
